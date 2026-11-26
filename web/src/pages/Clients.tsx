@@ -20,13 +20,15 @@ export function ClientsPage() {
   const { data, loading } = useData<ClientSummary[]>(filter === 'archived' ? '/clients?archived=1' : '/clients')
 
   const isNew = (c: ClientSummary) => Date.now() - Date.parse(c.created_at) < NEW_DAYS * 864e5 && !c.last_session
+  const term = q.trim()
   const list = useMemo(() => (data ?? []).filter(c => {
+    const q = term
     if (q && !c.name.includes(q) && !(c.project_title ?? '').includes(q) && !(c.phone ?? '').includes(q)) return false
     if (filter === 'today') return !!c.today
     if (filter === 'due') return c.balance > 0
     if (filter === 'new') return isNew(c)
     return true
-  }), [data, q, filter])
+  }), [data, term, filter])
 
   // סוף סשן: הדמות חוזרת מהדלת אל הכרטיס שלה
   const [back, setBack] = useState<string | null>(null)

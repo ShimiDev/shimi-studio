@@ -38,7 +38,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   if (!d) return <div className="empty">טוען…</div>
   const { project: p, client: c, totals: t } = d
   const hourly = d.mode === 'hourly'
-  const priceLine = hourly ? `${money(d.rate)} לשעה` : d.mode === 'per_song' ? `${money(d.rate)} לשיר` : `${money(d.rate)} מחיר כולל`
+  const priceLine = hourly ? `${money(d.rate)} לשעה` : d.mode === 'per_song' ? (d.rate ? `${money(d.rate)} לשיר` : 'לא נקבע מחיר לשיר') : `${money(d.rate)} מחיר כולל`
   const quote = p.quote_amount ? { now: t.charged, of: p.quote_amount, label: `${money(t.charged)} מתוך ${money(p.quote_amount)}` }
     : p.quoted_hours ? { now: t.seconds / 3600, of: p.quoted_hours, label: `${hh(t.seconds)} מתוך ${p.quoted_hours} ש׳` } : null
 
@@ -136,7 +136,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         </div>
       </section>}
 
-      {d.notes.length > 0 && <section className="panel">
+      {/* הערות פנימיות: לא מודפסות, כי הסיכום נשלח ללקוח */}
+      {d.notes.length > 0 && <section className="panel no-print">
         <h4>הערות מהסשנים</h4>
         <div className="cp-rows">{d.notes.map(n => <div key={n.id} className="cp-row cp-note-row"><span className="nowrap mute">{date(n.created_at)}</span><span className="grow">{n.text}</span></div>)}</div>
       </section>}

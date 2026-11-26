@@ -32,7 +32,8 @@ async function preview(db: D1Database, clientId: string, projectId: string | nul
     rate = project?.unit_price ?? client.hourly_rate ?? settings.default_rate
     amount = Math.round((seconds / 3600) * rate)
   } else if (mode === 'per_song') {
-    rate = project?.unit_price ?? settings.default_rate
+    // מחיר לשיר: מהפרויקט, ואם אין, מההגדרות. לא נופלים לתעריף השעתי
+    rate = project?.unit_price ?? settings.default_song_price ?? 0
     amount = rate * (songs ?? 0)
   } else {
     // מחיר כולל: מחייבים רק את מה שעוד לא חויב בפרויקט (למשל אחרי מקדמה)
@@ -50,11 +51,32 @@ async function preview(db: D1Database, clientId: string, projectId: string | nul
 export const charges = new Hono<AppEnv>()
 
 charges.get('/', async c => {
-  const client = c.req.query('client_id')
+  const where: string[] = []; const vals: unknown[] = []
+  if (c.req.query('client_id')) { where.push('ch.client_id = ?'); vals.push(c.req.query('client_id')) }
+  if (c.req.query('from') && c.req.query('to')) { where.push('ch.charged_at >= ? AND ch.charged_at < ?'); vals.push(c.req.query('from'), c.req.query('to')) }
   const sql = `SELECT ch.*, cl.name AS client_name FROM charges ch JOIN clients cl ON cl.id = ch.client_id
-               ${client ? 'WHERE ch.client_id = ?' : ''} ORDER BY charged_at DESC LIMIT 300`
-  return c.json(await all<Charge>(c.env.DB, sql, ...(client ? [client] : [])))
+               ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY charged_at DESC LIMIT 300`
+  return c.json(await all<Charge>(c.env.DB, sql, ...vals))
 })
+
+/** תיקון חיוב: תיאור, סכום, תאריך, פרויקט. השעות שחויבו בו נשארות מחויבות */
+charges.patch('/:id', async c => {
+  const cur = must(await first<Charge>(c.env.DB, `SELECT * FROM charges WHERE id = ?`, c.req.param('id')))
+  const b = await body(c.req.raw)
+  if ('project_id' in b) await projectOf(c.env.DB, str(b, 'project_id'), cur.client_id)
+  await run(c.env.DB, `UPDATE charges SET description = ?, amount = ?, charged_at = ?, project_id = ? WHERE id = ?`,
+    'description' in b ? str(b, 'description', { required: true, max: 300 }) : cur.description,
+    'amount' in b ? int(b, 'amount', { required: true, min: 0, max: 100_000_000 }) : cur.amount,
+    iso(b, 'charged_at') ?? cur.charged_at,
+    'project_id' in b ? str(b, 'project_id') : cur.project_id, cur.id)
+  return c.json(await first<Charge>(c.env.DB, `SELECT * FROM charges WHERE id = ?`, cur.id))
+})
+
+/** פרויקט חייב להיות של אותו לקוח */
+async function projectOf(db: D1Database, projectId: string | null, clientId: string | null) {
+  if (!projectId) return
+  must(await first(db, `SELECT id FROM projects WHERE id = ? AND client_id IS ?`, projectId, clientId), 'הפרויקט לא שייך ללקוח הזה')
+}
 
 charges.get('/preview', async c => {
   const clientId = c.req.query('client_id') ?? fail(400, 'חסר לקוח')
@@ -142,12 +164,30 @@ payments.post('/', async c => {
   const b = await body(c.req.raw)
   const client_id = str(b, 'client_id')
   if (client_id) must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ?`, client_id), 'הלקוח לא נמצא')
+  await projectOf(c.env.DB, str(b, 'project_id'), client_id)
   const id = uid()
   await run(c.env.DB,
     `INSERT INTO payments (id, client_id, project_id, amount, method, paid_at, notes) VALUES (?,?,?,?,?,?,?)`,
     id, client_id, str(b, 'project_id'), int(b, 'amount', { required: true, min: 1, max: 100_000_000 }),
     oneOf(b, 'method', METHODS, 'transfer'), iso(b, 'paid_at') ?? nowIso(), str(b, 'notes', { max: 1000 }))
   return c.json(await first<Payment>(c.env.DB, `SELECT * FROM payments WHERE id = ?`, id), 201)
+})
+
+payments.patch('/:id', async c => {
+  const cur = must(await first<Payment>(c.env.DB, `SELECT * FROM payments WHERE id = ?`, c.req.param('id')))
+  if (cur.invoice_ref) fail(409, 'כבר הופקה קבלה על התשלום הזה')
+  const b = await body(c.req.raw)
+  const client_id = 'client_id' in b ? str(b, 'client_id') : cur.client_id
+  if (client_id) must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ?`, client_id), 'הלקוח לא נמצא')
+  const project_id = 'project_id' in b ? str(b, 'project_id') : client_id === cur.client_id ? cur.project_id : null
+  await projectOf(c.env.DB, project_id, client_id)
+  await run(c.env.DB, `UPDATE payments SET client_id = ?, project_id = ?, amount = ?, method = ?, paid_at = ?, notes = ? WHERE id = ?`,
+    client_id, project_id,
+    'amount' in b ? int(b, 'amount', { required: true, min: 1, max: 100_000_000 }) : cur.amount,
+    'method' in b ? oneOf(b, 'method', METHODS) : cur.method,
+    iso(b, 'paid_at') ?? cur.paid_at,
+    'notes' in b ? str(b, 'notes', { max: 1000 }) : cur.notes, cur.id)
+  return c.json(await first<Payment>(c.env.DB, `SELECT * FROM payments WHERE id = ?`, cur.id))
 })
 
 payments.delete('/:id', async c => {
@@ -175,6 +215,19 @@ expenses.post('/', async c => {
     int(b, 'amount', { required: true, min: 1, max: 100_000_000 }), int(b, 'vat_amount', { min: 0 }),
     iso(b, 'spent_at') ?? nowIso(), str(b, 'notes', { max: 1000 }))
   return c.json(await first<Expense>(c.env.DB, `SELECT * FROM expenses WHERE id = ?`, id), 201)
+})
+
+expenses.patch('/:id', async c => {
+  const cur = must(await first<Expense>(c.env.DB, `SELECT * FROM expenses WHERE id = ?`, c.req.param('id')))
+  const b = await body(c.req.raw)
+  await run(c.env.DB, `UPDATE expenses SET category = ?, vendor = ?, amount = ?, vat_amount = ?, spent_at = ?, notes = ? WHERE id = ?`,
+    'category' in b ? oneOf(b, 'category', CATEGORIES) : cur.category,
+    'vendor' in b ? str(b, 'vendor', { max: 160 }) : cur.vendor,
+    'amount' in b ? int(b, 'amount', { required: true, min: 1, max: 100_000_000 }) : cur.amount,
+    'vat_amount' in b ? int(b, 'vat_amount', { min: 0 }) : cur.vat_amount,
+    iso(b, 'spent_at') ?? cur.spent_at,
+    'notes' in b ? str(b, 'notes', { max: 1000 }) : cur.notes, cur.id)
+  return c.json(await first<Expense>(c.env.DB, `SELECT * FROM expenses WHERE id = ?`, cur.id))
 })
 
 expenses.delete('/:id', async c => {

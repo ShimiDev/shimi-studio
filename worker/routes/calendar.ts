@@ -43,6 +43,10 @@ appointments.patch('/:id', async c => {
   const starts = iso(b, 'starts_at') ?? cur.starts_at
   const ends = iso(b, 'ends_at') ?? cur.ends_at
   if (ends <= starts) fail(400, 'שעת הסיום חייבת להיות אחרי שעת ההתחלה')
+  const newClient = 'client_id' in b ? str(b, 'client_id') : cur.client_id
+  if (newClient && newClient !== cur.client_id) must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ?`, newClient), 'הלקוח לא נמצא')
+  // הלקוח התחלף: הזימון הקודם שייך ללקוח אחר, אז מתחילים מחדש (עדכון לא יישלח לכתובת הישנה)
+  if (newClient !== cur.client_id) await run(c.env.DB, `UPDATE appointments SET invite_email = NULL, invite_sent_at = NULL, reminder_sent_at = NULL, invite_seq = invite_seq + 1 WHERE id = ?`, id)
   await run(c.env.DB,
     `UPDATE appointments SET client_id = ?, title = ?, kind = ?, starts_at = ?, ends_at = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
     'client_id' in b ? str(b, 'client_id') : cur.client_id,

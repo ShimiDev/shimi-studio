@@ -1,3 +1,4 @@
+import { ApiError } from './api'
 import { TZ, tzOffsetMinutes } from '../../shared/time'
 
 /** אגורות → "₪1,250" (בלי אגורות אם עגול) */
@@ -62,6 +63,8 @@ export function toLocalInput(iso: string | Date): string {
 }
 /** ערך מ-<input type="datetime-local"> (שעון ישראל) → ISO ב-UTC */
 export function fromLocalInput(v: string): string {
+  // שדה תאריך ריק או חלקי: הודעה ברורה במקום "משהו השתבש"
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) throw new ApiError('צריך למלא תאריך ושעה', 400)
   const [d, t] = v.split('T')
   const [y, m, dd] = d.split('-').map(Number)
   const [hh, mm] = t.split(':').map(Number)

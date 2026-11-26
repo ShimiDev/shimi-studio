@@ -26,7 +26,7 @@ interface Store {
   returning: string | null
   doneReturning(): void
   go(r: Route): void
-  toast(msg: string, err?: boolean): void
+  toast(msg: string, err?: boolean, action?: { label: string; run(): void }): void
   clock: RunningClock | null
   seconds: number
   startClock(kind: WorkKind, clientId: string | null, opts?: { present?: boolean; projectId?: string | null }): Promise<void>
@@ -50,7 +50,7 @@ export const useStore = () => useContext(Ctx)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>(parseHash)
-  const [toastMsg, setToast] = useState<{ msg: string; err: boolean } | null>(null)
+  const [toastMsg, setToast] = useState<{ msg: string; err: boolean; action?: { label: string; run(): void } } | null>(null)
   const [clock, setClock] = useState<RunningClock | null>(null)
   const [now, setNow] = useState(Date.now())
   const [revealed, setRevealedState] = useState(false)
@@ -68,15 +68,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     scrollTo(0, 0)
   }, [])
 
-  const toast = useCallback((msg: string, err = false) => {
-    setToast({ msg, err }); clearTimeout(toastT.current)
-    toastT.current = window.setTimeout(() => setToast(null), err ? 4000 : 2400)
+  const toast = useCallback((msg: string, err = false, action?: { label: string; run(): void }) => {
+    setToast({ msg, err, action }); clearTimeout(toastT.current)
+    toastT.current = window.setTimeout(() => setToast(null), action ? 6000 : err ? 4000 : 2400)
   }, [])
   const fail = useCallback((e: unknown) => toast(e instanceof ApiError ? e.message : 'משהו השתבש', true), [toast])
   const bump = useCallback(() => setVersion(v => v + 1), [])
 
   // השעון: הזמן האמיתי בשרת. כאן רק מתקתקים כל שנייה ומסנכרנים כל 30 שניות
-  const refresh = useCallback(() => api.get<RunningClock | null>('/clock').then(setClock).catch(() => {}), [])
+  // מי בחדר נשמר בשרת, כדי שכל מכשיר ולשונית יראו אותו דבר
+  const [lastRoom, setLastRoom] = useState<string | null>(null)
+  const refresh = useCallback(() => Promise.all([
+    api.get<RunningClock | null>('/clock').then(setClock).catch(() => {}),
+    api.get<{ client_id: string | null }>('/clock/room').then(r => setLastRoom(r.client_id)).catch(() => {}),
+  ]), [])
   useEffect(() => { refresh(); const i = setInterval(refresh, 30000); return () => clearInterval(i) }, [refresh])
   useEffect(() => { if (!clock) return; const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i) }, [clock])
   useEffect(() => { const v = () => document.visibilityState === 'visible' && refresh(); document.addEventListener('visibilitychange', v); return () => document.removeEventListener('visibilitychange', v) }, [refresh])
@@ -133,7 +138,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [privacy, route.page, go, clock])
 
   const seconds = clock ? entrySeconds(clock, now) : 0
-  const [lastRoom, setLastRoom] = useState<string | null>(() => { try { return sessionStorage.getItem('in-room') } catch { return null } })
   const ended = useRef<string | null>(null)
   // מי בחדר: מי שמקליטים איתו עכשיו, אחרת מי שנכנס אחרון ועוד לא סיים סשן.
   // שעון מיקס/עריכה ללקוח לא מכניס אותו לחדר.
@@ -148,16 +152,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       go({ page: 'control', clientId: inRoom })
       return
     }
-    setLastRoom(route.clientId); try { sessionStorage.setItem('in-room', route.clientId) } catch { /* */ }
-  }, [route, inRoom, toast, go])
+    const id = route.clientId
+    setLastRoom(id)
+    api.put('/clock/room', { client_id: id }).catch(e => {
+      // מכשיר אחר כבר הכניס לקוח: מראים מי בחדר
+      fail(e); refresh().then(() => go({ page: 'control' }))
+    })
+  }, [route, inRoom, toast, go, fail, refresh])
   const [returning, setReturning] = useState<string | null>(null)
   const endSession = useCallback(async (clientId: string) => {
     if (clock && clock.client_id === clientId) await stopClock()
     ended.current = clientId
-    setLastRoom(null); try { sessionStorage.removeItem('in-room') } catch { /* */ }
+    setLastRoom(null)
+    try { await api.post('/clock/room/leave', { client_id: clientId }) } catch (e) { fail(e) }
     setReturning(clientId)
     go({ page: 'clients' })
-  }, [clock, stopClock, go])
+  }, [clock, stopClock, go, fail])
   const doneReturning = useCallback(() => setReturning(null), [])
 
   const value = useMemo<Store>(() => ({
@@ -168,7 +178,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {toastMsg && <div className={`toast${toastMsg.err ? ' err' : ''}`} role="status">{toastMsg.msg}</div>}
+      {toastMsg && <div className={`toast${toastMsg.err ? ' err' : ''}`} role="status">{toastMsg.msg}
+        {toastMsg.action && <button className="btn small ghost toast-act" type="button" onClick={() => { const a = toastMsg.action!; setToast(null); a.run() }}>{toastMsg.action.label}</button>}</div>}
     </Ctx.Provider>
   )
 }

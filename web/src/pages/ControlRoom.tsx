@@ -9,7 +9,8 @@ import { api } from '../api'
 import { createLiveRoom, type LiveRoom } from '../three/liveRoom'
 import { hasWebGL } from '../three/character'
 import { avatar } from '../three/overlay'
-import { money, hours, clock as fmtClock, time, when, date, dayLong } from '../format'
+import { money, hours, clock as fmtClock, time, when, date, dayLong, spoken } from '../format'
+import { entrySeconds } from '../../../shared/time'
 import { WorkMenu } from '../components/WorkMenu'
 import { QuickNote } from '../components/QuickNote'
 import { PaymentForm, ChargeForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
@@ -37,6 +38,11 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   const dash = useData<Dashboard>(!privacy ? '/dashboard' : null)
   // הערות מסשנים פרטיים: אין להן כרטיס לקוח, אז מציגים אותן כאן כשאין לקוח בחדר
   const privNotes = useData<(Note & { started_at: string | null })[]>(!privacy && !clientId ? '/notes?private=1' : null)
+  const privSessions = useData<TimeEntry[]>(!privacy && !clientId ? '/time?private=1' : null)
+  // לאיזה פרויקט ייכנס הסשן. בוחרים רק כשיש ללקוח יותר מפרויקט פעיל אחד
+  const activeProjects = detail.data && detail.data.client.id === clientId ? detail.data.projects.filter(p => p.status === 'active') : []
+  const [pickedProject, setPickedProject] = useState<string>('')
+  const projectId = activeProjects.some(p => p.id === pickedProject) ? pickedProject : activeProjects[0]?.id ?? ''
   const c = detail.data?.client.id === clientId ? detail.data?.client : undefined
   const [dialog, setDialog] = useState<Dialog>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
@@ -79,7 +85,7 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   }
 
   // ---------- פעולות ----------
-  const rec = () => isRec ? S.stopClock() : S.startClock('recording', clientId ?? null, { present: !!clientId })
+  const rec = () => isRec ? S.stopClock() : S.startClock('recording', clientId ?? null, { present: !!clientId, projectId: clientId ? projectId || null : null })
   const workBtn = (el: HTMLElement) => {
     if (working) { S.stopClock(); return }
     if (!clientId) { S.toast('בחרו קודם לקוח, ואז הפעילו שעון עבודה'); return }
@@ -92,10 +98,11 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
 
   // מה כתוב על השולחן
   let deskTitle = name ?? 'אין לקוח בחדר'
-  let deskSub = clientId ? `${c?.project_title ?? ''}${c?.project_title ? ' · ' : ''}מוכן להקלטה` : 'בחרו לקוח, או לחצו REC לסשן פרטי'
+  const pTitle = activeProjects.find(p => p.id === projectId)?.title
+  let deskSub = clientId ? `${pTitle ?? ''}${pTitle ? ' · ' : ''}מוכן להקלטה` : 'בחרו לקוח, או לחצו REC לסשן פרטי'
   let deskTime = 0
-  if (isRec) { deskTitle = isSolo ? 'סשן פרטי' : (clock!.client_name ?? ''); deskSub = clock!.paused_at ? 'מושהה' : 'מקליטים'; deskTime = seconds }
-  else if (working) { deskTitle = `${workKind(clock!.kind).label} · ${name}`; deskSub = clock!.paused_at ? 'מושהה' : 'שעון עבודה רץ · הלקוח לא בחדר'; deskTime = seconds }
+  if (isRec) { deskTitle = isSolo ? 'סשן פרטי' : (clock!.client_name ?? ''); deskSub = `${clock!.project_title ? clock!.project_title + ' · ' : ''}${clock!.paused_at ? 'מושהה' : 'מקליטים'}`; deskTime = seconds }
+  else if (working) { deskTitle = `${workKind(clock!.kind).label} · ${name}`; deskSub = `${clock!.project_title ? clock!.project_title + ' · ' : ''}${clock!.paused_at ? 'מושהה' : 'שעון עבודה רץ · הלקוח לא בחדר'}`; deskTime = seconds }
   else if (otherWork) { deskSub = `רץ שעון ${workKind(clock!.kind).label} ל${clock!.client_name}` }
 
   const wlabel = isRec && !isSolo ? 'חדר ההקלטה' : working ? `חדר ההקלטה · ${workKind(clock!.kind).label} · ${name}` : name ? `חדר ההקלטה · ${name}` : 'חדר ההקלטה'
@@ -116,6 +123,12 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
                 <button className="btn small" type="button" onClick={() => S.go({ page: 'clients' })}>בחירת לקוח</button>
                 {dash.data?.next_up?.client_id && <button className="btn small" type="button" onClick={() => S.go({ page: 'control', clientId: dash.data!.next_up!.client_id! })}>להכניס את {dash.data.next_up.client_name}</button>}
               </div>
+              {!!privSessions.data?.length && <>
+                <h4 style={{ marginTop: 14 }}>סשנים פרטיים אחרונים</h4>
+                {privSessions.data.slice(0, 5).map(t => <div key={t.id} className="rem" style={{ gridTemplateColumns: '1fr auto' }}>
+                  <span>{workKind(t.kind).label} · {spoken(entrySeconds(t))}<small>{date(t.started_at)} {time(t.started_at)}</small></span>
+                  <button className="btn small ghost" type="button" onClick={async () => { if (!confirm('למחוק את הסשן הפרטי?')) return; try { await api.del(`/time/${t.id}`); privSessions.reload(); S.bump() } catch (e) { S.fail(e) } }}>מחיקה</button></div>)}
+              </>}
               {!!privNotes.data?.length && <>
                 <h4 style={{ marginTop: 14 }}>הערות מסשנים פרטיים</h4>
                 {privNotes.data.slice(0, 5).map(n => <div key={n.id} className="rem" style={{ gridTemplateColumns: "1fr auto" }}><span>{n.text}<small>{date(n.created_at)}</small></span>
@@ -141,7 +154,12 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
             </div>
           </div>
           <div className="desk" style={working ? { ['--wc' as string]: workKind(clock!.kind).color } : undefined}>
-            <div className="recinfo"><b>{deskTitle}</b><small>{deskSub}</small></div>
+            <div className="recinfo"><b>{deskTitle}</b><small>{deskSub}</small>
+              {!isRec && !working && activeProjects.length > 1 && (
+                <select className="cp-proj-pick desk-proj" aria-label="לאיזה פרויקט נכנס הסשן" value={projectId} onChange={e => setPickedProject(e.target.value)}>
+                  {activeProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>
+              )}</div>
             <div className="rectime">{fmtClock(deskTime)}</div>
             {!isRec && (
               <button className="workbtn" type="button" onClick={e => workBtn(e.currentTarget)}>
@@ -196,7 +214,7 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
       {noteEl && canNote && <QuickNote anchor={noteEl} clientId={clientId ?? null} entryId={noteEntry}
         title={isRec ? (isSolo ? 'הערה לסשן הפרטי' : `הערה מההקלטה של ${clock?.client_name ?? ''}`) : `הערה על ${name ?? 'הלקוח'}`}
         onClose={() => setNoteEl(null)} />}
-      {menuEl && clientId && <WorkMenu anchor={menuEl} title={`שעון עבודה ל${name ?? ''}`} onClose={() => setMenuEl(null)} onPick={k => S.startClock(k, clientId)} />}
+      {menuEl && clientId && <WorkMenu anchor={menuEl} title={`שעון עבודה ל${name ?? ''}`} onClose={() => setMenuEl(null)} onPick={k => S.startClock(k, clientId, { projectId: projectId || null })} />}
       {dialog === 'pay' && <PaymentForm clientId={clientId} onClose={() => setDialog(null)} />}
       {dialog === 'charge' && clientId && <ChargeForm clientId={clientId} onClose={() => setDialog(null)} />}
       {dialog === 'appt' && <AppointmentForm clientId={clientId} onClose={() => setDialog(null)} />}
@@ -252,7 +270,14 @@ function ClientPanel({ d, onAction }: { d: Detail; onAction(a: Dialog): void }) 
 function Reminders({ items }: { items: Dashboard['reminders'] }) {
   const { bump, fail } = useStore()
   if (!items.length) return <div className="mute">אין תזכורות פתוחות.</div>
-  const done = async (id: string) => { try { await api.patch(`/reminders/${id}`, { done: true }); bump() } catch (e) { fail(e) } }
+  const { toast } = useStore()
+  // אפשר לבטל: התזכורת נעלמת מהרשימה, אז נותנים כמה שניות להחזיר אותה
+  const done = async (id: string) => {
+    try {
+      await api.patch(`/reminders/${id}`, { done: true }); bump()
+      toast('סומן כבוצע', false, { label: 'ביטול', run: () => { api.patch(`/reminders/${id}`, { done: false }).then(bump).catch(fail) } })
+    } catch (e) { fail(e) }
+  }
   return <>{items.map(r => (
     <label key={r.id} className="rem">
       <input type="checkbox" onChange={() => done(r.id)} />
