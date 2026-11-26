@@ -43,6 +43,8 @@ export function ClientsPage() {
 
   const enter = (c: ClientSummary, card: HTMLElement) => {
     if (leaving) return
+    // כבר בחדר? פשוט עוברים לשם, בלי ההליכה
+    if (inRoom === c.id) { go({ page: 'control', clientId: c.id }); return }
     setLeaving(c.id)
     const ava = card.querySelector<HTMLElement>('.ava')!
     card.classList.add('lifted')
