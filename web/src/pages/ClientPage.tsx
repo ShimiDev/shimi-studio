@@ -72,7 +72,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
       <button className="btn small ghost cp-back" type="button" onClick={() => S.go({ page: 'clients' })}>→ כל הלקוחות</button>
 
       <header className="cp-head panel">
-        {img && <img className="cp-ava" src={img} alt="" style={{ background: `linear-gradient(160deg, ${c.color_a}33, ${c.color_b}44)` }} />}
+        {S.inRoom === c.id
+          ? <div className="cp-ava ava-empty" style={{ background: `linear-gradient(160deg, ${c.color_a}22, ${c.color_b}22)` }}><span className="ava-out">בחדר</span></div>
+          : img && <img className="cp-ava" src={img} alt="" style={{ background: `linear-gradient(160deg, ${c.color_a}33, ${c.color_b}44)` }} />}
         <div className="cp-id">
           <h1>{c.name}{c.archived_at && <span className="pill" style={{ marginInlineStart: 8 }}>בארכיון</span>}</h1>
           <div className="mute">{[CLIENT_KINDS[c.kind], c.project_title, `לקוח מ-${date(c.created_at)}`].filter(Boolean).join(' · ')}</div>

@@ -11,7 +11,7 @@ type Filter = 'all' | 'today' | 'due' | 'new' | 'archived'
 const NEW_DAYS = 21
 
 export function ClientsPage() {
-  const { go, clock, startClock, stopClock } = useStore()
+  const { go, clock, startClock, stopClock, inRoom } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
@@ -58,8 +58,9 @@ export function ClientsPage() {
               role="button" tabIndex={0} aria-label={`כרטיס הלקוח של ${c.name}`}
               onClick={e => !(e.target as HTMLElement).closest('.quick, .go') && go({ page: 'client', clientId: c.id })}
               onKeyDown={e => e.key === 'Enter' && e.target === e.currentTarget && go({ page: 'client', clientId: c.id })}>
-              <div className="ava" style={{ background: `linear-gradient(160deg, ${c.color_a}33, ${c.color_b}44)` }}>
-                {img && <img src={img} alt="" />}
+              <div className={`ava${inRoom === c.id ? ' empty' : ''}`} style={{ background: `linear-gradient(160deg, ${c.color_a}33, ${c.color_b}44)` }}
+                title={inRoom === c.id ? `${c.name} בחדר עכשיו` : undefined}>
+                {inRoom === c.id ? <span className="ava-out">בחדר</span> : img && <img src={img} alt="" />}
                 <div className="eq"><span /><span /><span /><span /></div>
               </div>
               <div>
