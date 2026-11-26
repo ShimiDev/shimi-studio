@@ -46,7 +46,7 @@ npm run dev                         # http://localhost:5173
 5. **הגנה בכניסה (Cloudflare Access, חינם):**
    - בלוח של Cloudflare: Workers & Pages → shimi-studio → Settings → Domains & Routes → ליד `workers.dev` להפעיל **Cloudflare Access**. אפשר גם דרך Zero Trust → Access → Applications → Self-hosted על אותה כתובת.
    - במדיניות: Allow, Emails = המייל של שימי. הכניסה היא בקוד חד־פעמי למייל.
-   - להעתיק את ה-**AUD** של האפליקציה ואת דומיין הצוות (`<team>.cloudflareaccess.com`) אל `ACCESS_AUD` ו-`ACCESS_TEAM_DOMAIN` ב-`wrangler.jsonc`, ולהריץ שוב `npm run deploy`.
+   - להכניס את דומיין הצוות (`<team>.cloudflareaccess.com`) ל-`ACCESS_TEAM_DOMAIN` ב-`wrangler.jsonc`. ה-AUD של האפליקציה (`ACCESS_AUD`) רשות ומוסיף בדיקה שהטוקן שייך בדיוק לאפליקציה הזו.
 6. עד שסעיף 5 הושלם, ה-API נעול ומחזיר "המערכת עדיין לא הוגדרה". זה בכוונה.
 
 אבטחה בשתי שכבות: Access עוצר את מי שלא מורשה לפני שהוא מגיע לאתר, וה-Worker בודק בכל בקשה את החתימה של Access. כך גם כתובות תצוגה מקדימה של Cloudflare לא חושפות נתונים.

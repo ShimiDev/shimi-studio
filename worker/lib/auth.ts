@@ -15,8 +15,10 @@ export const requireAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
 
   const team = env.ACCESS_TEAM_DOMAIN
   const aud = env.ACCESS_AUD
-  // אם ההגדרות חסרות, נועלים הכל. עדיף מערכת סגורה ממערכת פתוחה בטעות.
-  if (!team || !aud) return c.json({ error: 'המערכת עדיין לא הוגדרה לכניסה מאובטחת' }, 503)
+  // אם דומיין הצוות חסר, נועלים הכל. עדיף מערכת סגורה ממערכת פתוחה בטעות.
+  // ה-AUD רשות: בלוח החדש של Workers הוא לא מוצג. החתימה של הצוות והמנפיק נבדקים תמיד,
+  // וכשיש AUD בודקים גם שהטוקן שייך בדיוק לאפליקציה הזו.
+  if (!team) return c.json({ error: 'המערכת עדיין לא הוגדרה לכניסה מאובטחת' }, 503)
 
   const token = c.req.header('Cf-Access-Jwt-Assertion')
   if (!token) return c.json({ error: 'נדרשת כניסה' }, 401)
@@ -26,7 +28,7 @@ export const requireAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
     jwksTeam = team
   }
   try {
-    await jwtVerify(token, jwks, { issuer: `https://${team}`, audience: aud })
+    await jwtVerify(token, jwks, { issuer: `https://${team}`, ...(aud ? { audience: aud.split(',').map(a => a.trim()) } : {}) })
   } catch {
     return c.json({ error: 'הכניסה פגה. רעננו את הדף' }, 401)
   }

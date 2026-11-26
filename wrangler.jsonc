@@ -21,8 +21,8 @@
   ],
   "vars": {
     // דומיין הצוות של Cloudflare Access, למשל shimi.cloudflareaccess.com
-    "ACCESS_TEAM_DOMAIN": "",
-    // ה-AUD של אפליקציית ה-Access (לא סוד, אבל חובה)
+    "ACCESS_TEAM_DOMAIN": "blue-sun-9726.cloudflareaccess.com",
+    // ה-AUD של אפליקציית ה-Access (לא סוד). רשות: בלעדיו נבדקים חתימת הצוות והמנפיק בלבד
     "ACCESS_AUD": ""
   },
   "observability": { "enabled": true }
