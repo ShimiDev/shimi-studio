@@ -4,6 +4,35 @@ import { useStore, useData } from '../store'
 import { toAgorot, fromAgorot } from '../format'
 import { BILLING_MODES, type Settings, type BillingMode } from '../../../shared/types'
 
+function DemoPanel() {
+  const { toast, fail } = useStore()
+  const { data, setData } = useData<{ loaded: boolean }>('/demo')
+  const [busy, setBusy] = useState(false)
+  const act = async (load: boolean) => {
+    if (!load && !confirm('למחוק את כל נתוני ההדגמה? נתונים שהוזנו ידנית לא יימחקו.')) return
+    setBusy(true)
+    try {
+      setData(load ? await api.post('/demo') : await api.del('/demo'))
+      toast(load ? 'נתוני ההדגמה נטענו' : 'נתוני ההדגמה נמחקו')
+      setTimeout(() => location.reload(), 600)
+    } catch (e) { fail(e) } finally { setBusy(false) }
+  }
+  if (!data) return null
+  return (
+    <div className="panel">
+      <h4>נתוני הדגמה</h4>
+      <p className="mute" style={{ marginTop: 0, fontSize: 14 }}>
+        {data.loaded
+          ? 'כרגע טעונים לקוחות, שעות, תשלומים ותורים לדוגמה. לפני שמתחילים לעבוד באמת, מוחקים אותם כאן. נתונים שהוזנו ידנית נשארים.'
+          : 'טוען כמה לקוחות, שלושה חודשי עבודה, תשלומים, הוצאות ותורים לדוגמה, כדי לראות איך המערכת נראית כשהיא מלאה.'}
+      </p>
+      {data.loaded
+        ? <button className="btn small" type="button" disabled={busy} onClick={() => act(false)}>מחיקת נתוני ההדגמה</button>
+        : <button className="btn small primary" type="button" disabled={busy} onClick={() => act(true)}>טעינת נתוני הדגמה</button>}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { toast, fail } = useStore()
   const { data, setData } = useData<Settings>('/settings')
@@ -44,6 +73,7 @@ export function SettingsPage() {
           <div className="row" style={{ justifyContent: 'space-between', padding: '6px 0' }}><span>הנהלת חשבונות</span><span className="pill">בהמשך</span></div>
           <div className="row" style={{ justifyContent: 'space-between', padding: '6px 0' }}><span>סליקה</span><span className="pill">בהמשך</span></div>
         </div>
+        <DemoPanel />
       </div>
     </>
   )

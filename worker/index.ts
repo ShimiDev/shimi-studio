@@ -10,6 +10,7 @@ import { charges, payments, expenses } from './routes/money'
 import { appointments, reminders } from './routes/calendar'
 import { settings } from './routes/settings'
 import { overview } from './routes/overview'
+import { demo } from './routes/demo'
 
 const app = new Hono<AppEnv>().basePath('/api')
 
@@ -28,6 +29,7 @@ app.route('/expenses', expenses)
 app.route('/appointments', appointments)
 app.route('/reminders', reminders)
 app.route('/settings', settings)
+app.route('/demo', demo)
 app.route('/', overview)
 
 app.notFound(c => c.json({ error: 'לא נמצא' }, 404))
