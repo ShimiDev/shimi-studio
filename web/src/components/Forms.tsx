@@ -1,0 +1,334 @@
+// כל הטפסים של המערכת. כל טופס: שדות עם תווית מעל, המרה משקלים לאגורות, ושמירה לשרת.
+import { useEffect, useState } from 'react'
+import { api, ApiError } from '../api'
+import { useStore, useData } from '../store'
+import { Modal, FormShell } from './Modal'
+import { toAgorot, fromAgorot, toLocalInput, fromLocalInput, money, hours } from '../format'
+import {
+  CLIENT_KINDS, PAY_METHODS, EXPENSE_CATEGORIES, BILLING_MODES, WORK_KINDS,
+  type Client, type ClientKind, type Project, type ClientSummary, type ChargePreview, type Appointment, type BillingMode,
+} from '../../../shared/types'
+
+/** עזר קטן לטפסים: שדות, מצב שמירה ושגיאה */
+function useForm<T extends Record<string, unknown>>(init: T) {
+  const [v, setV] = useState(init)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const set = <K extends keyof T>(k: K) => (e: { target: { value: string; type?: string; checked?: boolean } }) =>
+    setV(s => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError(null)
+    try { await fn() } catch (e) { setError(e instanceof ApiError ? e.message : 'משהו השתבש') } finally { setBusy(false) }
+  }
+  return { v, setV, set, busy, error, setError, run }
+}
+
+function ClientSelect({ value, onChange, allowNone }: { value: string; onChange(v: string): void; allowNone?: string }) {
+  const { data } = useData<ClientSummary[]>('/clients')
+  return (
+    <label className="field"><span>לקוח</span>
+      <select value={value} onChange={e => onChange(e.target.value)}>
+        {allowNone != null ? <option value="">{allowNone}</option> : <option value="" disabled>בחרו לקוח</option>}
+        {data?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function ProjectSelect({ clientId, value, onChange }: { clientId: string; value: string; onChange(v: string): void }) {
+  const { data } = useData<{ projects: Project[] }>(clientId ? `/clients/${clientId}` : null)
+  const list = data?.projects.filter(p => p.status === 'active') ?? []
+  if (!clientId || !list.length) return null
+  return (
+    <label className="field"><span>פרויקט</span>
+      <select value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">בלי פרויקט</option>
+        {list.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+      </select>
+    </label>
+  )
+}
+
+// ---------------- לקוח ----------------
+export function ClientForm({ client, onClose, onSaved }: { client?: Client; onClose(): void; onSaved?(c: Client): void }) {
+  const { bump, toast } = useStore()
+  const f = useForm({
+    name: client?.name ?? '', kind: (client?.kind ?? 'artist') as ClientKind, is_group: !!client?.is_group,
+    phone: client?.phone ?? '', email: client?.email ?? '', hourly_rate: fromAgorot(client?.hourly_rate),
+    notes: client?.notes ?? '', project_title: '', color_a: client?.color_a ?? '', color_b: client?.color_b ?? '',
+  })
+  const save = () => f.run(async () => {
+    if (!f.v.name.trim()) throw new ApiError('צריך שם', 400)
+    const payload = {
+      name: f.v.name, kind: f.v.kind, is_group: f.v.is_group, phone: f.v.phone || null, email: f.v.email || null,
+      hourly_rate: toAgorot(f.v.hourly_rate), notes: f.v.notes || null,
+      ...(client ? { color_a: f.v.color_a, color_b: f.v.color_b } : { project_title: f.v.project_title || null }),
+    }
+    const c = client ? await api.patch<Client>(`/clients/${client.id}`, payload) : await api.post<Client>('/clients', payload)
+    bump(); toast(client ? 'נשמר' : `${c.name} נוסף/ה`); onSaved?.(c); onClose()
+  })
+  const archive = () => f.run(async () => {
+    await api.patch(`/clients/${client!.id}`, { archived: !client!.archived_at })
+    bump(); toast(client!.archived_at ? 'הלקוח חזר לרשימה' : 'הלקוח הועבר לארכיון'); onClose()
+  })
+  return (
+    <Modal title={client ? `עריכת ${client.name}` : 'לקוח חדש'} onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}
+        extra={client && <button className="btn small danger" type="button" onClick={archive}>{client.archived_at ? 'החזרה מהארכיון' : 'העברה לארכיון'}</button>}>
+        <label className="field"><span>שם</span><input value={f.v.name} onChange={f.set('name')} autoComplete="off" required /></label>
+        <div className="fields2">
+          <label className="field"><span>סוג</span>
+            <select value={f.v.kind} onChange={e => { const k = e.target.value as ClientKind; f.setV(s => ({ ...s, kind: k, is_group: client ? s.is_group : k === 'band' || k === 'choir' })) }}>
+              {Object.entries(CLIENT_KINDS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </label>
+          <label className="field"><span>תעריף לשעה (₪)</span><input inputMode="decimal" value={f.v.hourly_rate} onChange={f.set('hourly_rate')} placeholder="לפי ההגדרות" /></label>
+          <label className="field"><span>טלפון</span><input type="tel" dir="ltr" value={f.v.phone} onChange={f.set('phone')} /></label>
+          <label className="field"><span>מייל</span><input type="email" dir="ltr" value={f.v.email} onChange={f.set('email')} /></label>
+        </div>
+        <label className="check"><input type="checkbox" checked={f.v.is_group} onChange={f.set('is_group')} />הרכב (שלוש דמויות בחלון)</label>
+        {!client && <label className="field"><span>פרויקט ראשון (לא חובה)</span><input value={f.v.project_title} onChange={f.set('project_title')} placeholder="למשל: אלבום בכורה" /></label>}
+        {client && (
+          <div className="fields2">
+            <label className="field"><span>צבע ראשי של הדמות</span><input type="color" value={f.v.color_a} onChange={f.set('color_a')} /></label>
+            <label className="field"><span>צבע משני</span><input type="color" value={f.v.color_b} onChange={f.set('color_b')} /></label>
+          </div>
+        )}
+        <label className="field"><span>הערות</span><textarea value={f.v.notes} onChange={f.set('notes')} /></label>
+      </FormShell>
+    </Modal>
+  )
+}
+
+// ---------------- פרויקט ----------------
+export function ProjectForm({ clientId, project, onClose }: { clientId: string; project?: Project; onClose(): void }) {
+  const { bump, toast } = useStore()
+  const f = useForm({
+    title: project?.title ?? '', billing_mode: (project?.billing_mode ?? '') as BillingMode | '',
+    unit_price: fromAgorot(project?.unit_price), quote_amount: fromAgorot(project?.quote_amount),
+    quoted_hours: project?.quoted_hours?.toString() ?? '', done: project?.status === 'done',
+  })
+  const priceLabel = f.v.billing_mode === 'per_song' ? 'מחיר לשיר (₪)' : f.v.billing_mode === 'fixed' ? 'מחיר כולל (₪)' : 'מחיר לשעה (₪)'
+  const save = () => f.run(async () => {
+    const payload = {
+      title: f.v.title, billing_mode: f.v.billing_mode || null, unit_price: toAgorot(f.v.unit_price),
+      quote_amount: toAgorot(f.v.quote_amount), quoted_hours: f.v.quoted_hours ? Number(f.v.quoted_hours) : null,
+    }
+    if (project) await api.patch(`/projects/${project.id}`, { ...payload, status: f.v.done ? 'done' : 'active' })
+    else await api.post('/projects', { ...payload, client_id: clientId })
+    bump(); toast('הפרויקט נשמר'); onClose()
+  })
+  return (
+    <Modal title={project ? 'עריכת פרויקט' : 'פרויקט חדש'} onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
+        <label className="field"><span>שם הפרויקט</span><input value={f.v.title} onChange={f.set('title')} /></label>
+        <label className="field"><span>שיטת תמחור</span>
+          <select value={f.v.billing_mode} onChange={f.set('billing_mode')}>
+            <option value="">לפי ההגדרות הכלליות</option>
+            {Object.entries(BILLING_MODES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </label>
+        <div className="fields2">
+          <label className="field"><span>{priceLabel}</span><input inputMode="decimal" value={f.v.unit_price} onChange={f.set('unit_price')} placeholder="לפי ההגדרות" /></label>
+          <label className="field"><span>הצעת מחיר כוללת (₪)</span><input inputMode="decimal" value={f.v.quote_amount} onChange={f.set('quote_amount')} /></label>
+          <label className="field"><span>שעות בהצעה</span><input inputMode="decimal" value={f.v.quoted_hours} onChange={f.set('quoted_hours')} /></label>
+        </div>
+        {project && <label className="check"><input type="checkbox" checked={f.v.done} onChange={f.set('done')} />הפרויקט הסתיים</label>}
+      </FormShell>
+    </Modal>
+  )
+}
+
+// ---------------- תשלום ----------------
+export function PaymentForm({ clientId, onClose }: { clientId?: string; onClose(): void }) {
+  const { bump, toast } = useStore()
+  const f = useForm({ client_id: clientId ?? '', project_id: '', amount: '', method: 'transfer', paid_at: toLocalInput(new Date()), notes: '' })
+  const save = () => f.run(async () => {
+    const amount = toAgorot(f.v.amount)
+    if (!amount || amount <= 0) throw new ApiError('צריך סכום', 400)
+    await api.post('/payments', { client_id: f.v.client_id || null, project_id: f.v.project_id || null, amount, method: f.v.method, paid_at: fromLocalInput(f.v.paid_at), notes: f.v.notes || null })
+    bump(); toast(`נרשם תשלום של ${money(amount)}`); onClose()
+  })
+  return (
+    <Modal title="רישום תשלום" onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
+        <ClientSelect value={f.v.client_id} onChange={v => f.setV(s => ({ ...s, client_id: v, project_id: '' }))} allowNone="בלי לקוח" />
+        <ProjectSelect clientId={f.v.client_id} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
+        <div className="fields2">
+          <label className="field"><span>סכום (₪)</span><input inputMode="decimal" value={f.v.amount} onChange={f.set('amount')} /></label>
+          <label className="field"><span>אמצעי תשלום</span>
+            <select value={f.v.method} onChange={f.set('method')}>{Object.entries(PAY_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          </label>
+        </div>
+        <label className="field"><span>מתי</span><input type="datetime-local" value={f.v.paid_at} onChange={f.set('paid_at')} /></label>
+        <label className="field"><span>הערה</span><input value={f.v.notes} onChange={f.set('notes')} /></label>
+      </FormShell>
+    </Modal>
+  )
+}
+
+// ---------------- חיוב (ידני או מתוך שעות) ----------------
+export function ChargeForm({ clientId, onClose }: { clientId: string; onClose(): void }) {
+  const { bump, toast } = useStore()
+  const f = useForm({ project_id: '', fromTime: true, songs: '1', amount: '', description: '' })
+  const [pv, setPv] = useState<ChargePreview | null>(null)
+  // ברירת מחדל: הפרויקט הפעיל הראשון של הלקוח
+  const det = useData<{ projects: Project[] }>(`/clients/${clientId}`)
+  const firstProject = det.data?.projects.find(p => p.status === 'active')?.id
+  useEffect(() => { if (firstProject) f.setV(s => (s.project_id ? s : { ...s, project_id: firstProject })) }, [firstProject]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!f.v.fromTime) return
+    const q = new URLSearchParams({ client_id: clientId, ...(f.v.project_id ? { project_id: f.v.project_id } : {}), songs: f.v.songs || '0' })
+    api.get<ChargePreview>(`/charges/preview?${q}`).then(p => { setPv(p); f.setV(s => ({ ...s, amount: fromAgorot(p.amount), description: p.description })) }).catch(() => setPv(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, f.v.project_id, f.v.fromTime, f.v.songs])
+  const save = () => f.run(async () => {
+    const amount = toAgorot(f.v.amount)
+    if (amount == null) throw new ApiError('צריך סכום', 400)
+    await api.post('/charges', {
+      client_id: clientId, project_id: f.v.project_id || null, amount, description: f.v.description,
+      ...(f.v.fromTime ? { from_time: true, songs: Number(f.v.songs) || 0 } : {}),
+    })
+    bump(); toast(`נרשם חיוב של ${money(amount)}`); onClose()
+  })
+  return (
+    <Modal title="חיוב לקוח" onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose} submit="חיוב">
+        <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
+        <div className="seg" style={{ marginBottom: 12 }}>
+          <button type="button" aria-pressed={f.v.fromTime} onClick={() => f.setV(s => ({ ...s, fromTime: true }))}>מתוך השעות שנרשמו</button>
+          <button type="button" aria-pressed={!f.v.fromTime} onClick={() => f.setV(s => ({ ...s, fromTime: false, amount: '', description: '' }))}>חיוב ידני</button>
+        </div>
+        {f.v.fromTime && pv && (
+          <p className="mute" style={{ marginTop: 0 }}>
+            {BILLING_MODES[pv.mode]} · שעות פתוחות לחיוב: <b>{hours(pv.seconds)}</b>
+            {pv.mode === 'hourly' && <> · תעריף {money(pv.rate)}</>}
+          </p>
+        )}
+        {f.v.fromTime && pv?.mode === 'per_song' && (
+          <label className="field"><span>כמה שירים</span><input inputMode="numeric" value={f.v.songs} onChange={f.set('songs')} /></label>
+        )}
+        <div className="fields2">
+          <label className="field"><span>סכום (₪)</span><input inputMode="decimal" value={f.v.amount} onChange={f.set('amount')} /></label>
+          <label className="field"><span>תיאור</span><input value={f.v.description} onChange={f.set('description')} /></label>
+        </div>
+      </FormShell>
+    </Modal>
+  )
+}
+
+// ---------------- תור ----------------
+export function AppointmentForm({ appt, clientId, start, onClose }: { appt?: Appointment; clientId?: string; start?: Date; onClose(): void }) {
+  const { bump, toast } = useStore()
+  const s0 = appt ? new Date(appt.starts_at) : (start ?? nextHour())
+  const dur = appt ? (Date.parse(appt.ends_at) - Date.parse(appt.starts_at)) / 60000 : 180
+  const f = useForm({ client_id: appt?.client_id ?? clientId ?? '', title: appt?.title ?? '', kind: appt?.kind ?? 'recording', starts: toLocalInput(s0), minutes: String(dur), notes: appt?.notes ?? '' })
+  const save = () => f.run(async () => {
+    const starts = fromLocalInput(f.v.starts), mins = Number(f.v.minutes)
+    if (!(mins > 0)) throw new ApiError('משך לא תקין', 400)
+    const body = { client_id: f.v.client_id || null, title: f.v.title || null, kind: f.v.kind, starts_at: starts, ends_at: new Date(Date.parse(starts) + mins * 60000).toISOString(), notes: f.v.notes || null }
+    if (appt) { await api.patch(`/appointments/${appt.id}`, body); toast('התור עודכן') }
+    else {
+      const r = await api.post<{ overlap: boolean }>('/appointments', body)
+      toast(r.overlap ? 'התור נקבע. שימו לב: יש חפיפה עם תור אחר' : 'התור נקבע')
+    }
+    bump(); onClose()
+  })
+  const setStatus = (status: string) => f.run(async () => { await api.patch(`/appointments/${appt!.id}`, { status }); bump(); onClose() })
+  return (
+    <Modal title={appt ? 'עריכת תור' : 'תור חדש'} onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}
+        extra={appt && appt.status === 'scheduled' && <button className="btn small danger" type="button" onClick={() => setStatus('cancelled')}>ביטול התור</button>}>
+        <ClientSelect value={f.v.client_id} onChange={v => f.setV(s => ({ ...s, client_id: v }))} allowNone="בלי לקוח (תור אישי)" />
+        <div className="fields2">
+          <label className="field"><span>מתי</span><input type="datetime-local" value={f.v.starts} onChange={f.set('starts')} /></label>
+          <label className="field"><span>משך (דקות)</span>
+            <select value={f.v.minutes} onChange={f.set('minutes')}>
+              {[30, 60, 90, 120, 180, 240, 300, 360, 480].map(m => <option key={m} value={m}>{m < 60 ? `${m} דק׳` : `${m / 60} שעות`}</option>)}
+              {![30, 60, 90, 120, 180, 240, 300, 360, 480].includes(Number(f.v.minutes)) && <option value={f.v.minutes}>{f.v.minutes} דק׳</option>}
+            </select>
+          </label>
+          <label className="field"><span>סוג</span>
+            <select value={f.v.kind} onChange={f.set('kind')}>{WORK_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}</select>
+          </label>
+          <label className="field"><span>כותרת (לא חובה)</span><input value={f.v.title} onChange={f.set('title')} placeholder="למשל: ווקאל לסינגל" /></label>
+        </div>
+        <label className="field"><span>הערות</span><textarea value={f.v.notes} onChange={f.set('notes')} /></label>
+      </FormShell>
+    </Modal>
+  )
+}
+function nextHour() { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d }
+
+// ---------------- הוצאה ----------------
+export function ExpenseForm({ onClose }: { onClose(): void }) {
+  const { bump, toast } = useStore()
+  const f = useForm({ category: 'equipment', vendor: '', amount: '', vat_amount: '', spent_at: toLocalInput(new Date()), notes: '' })
+  const save = () => f.run(async () => {
+    const amount = toAgorot(f.v.amount)
+    if (!amount) throw new ApiError('צריך סכום', 400)
+    await api.post('/expenses', { category: f.v.category, vendor: f.v.vendor || null, amount, vat_amount: toAgorot(f.v.vat_amount), spent_at: fromLocalInput(f.v.spent_at), notes: f.v.notes || null })
+    bump(); toast(`נרשמה הוצאה של ${money(amount)}`); onClose()
+  })
+  return (
+    <Modal title="הוצאה חדשה" onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
+        <div className="fields2">
+          <label className="field"><span>קטגוריה</span>
+            <select value={f.v.category} onChange={f.set('category')}>{Object.entries(EXPENSE_CATEGORIES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          </label>
+          <label className="field"><span>ספק</span><input value={f.v.vendor} onChange={f.set('vendor')} /></label>
+          <label className="field"><span>סכום כולל (₪)</span><input inputMode="decimal" value={f.v.amount} onChange={f.set('amount')} /></label>
+          <label className="field"><span>מתוכו מע״מ (₪)</span><input inputMode="decimal" value={f.v.vat_amount} onChange={f.set('vat_amount')} /></label>
+        </div>
+        <label className="field"><span>מתי</span><input type="datetime-local" value={f.v.spent_at} onChange={f.set('spent_at')} /></label>
+        <label className="field"><span>הערה</span><input value={f.v.notes} onChange={f.set('notes')} /></label>
+      </FormShell>
+    </Modal>
+  )
+}
+
+// ---------------- שעות ידניות ----------------
+export function ManualTimeForm({ clientId, onClose }: { clientId: string; onClose(): void }) {
+  const { bump, toast } = useStore()
+  const f = useForm({ project_id: '', kind: 'mix', started: toLocalInput(new Date(Date.now() - 2 * 3600e3)), minutes: '120', notes: '' })
+  const save = () => f.run(async () => {
+    await api.post('/time', { client_id: clientId, project_id: f.v.project_id || null, kind: f.v.kind, started_at: fromLocalInput(f.v.started), minutes: Number(f.v.minutes), notes: f.v.notes || null })
+    bump(); toast('השעות נרשמו'); onClose()
+  })
+  return (
+    <Modal title="הוספת שעות ידנית" onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
+        <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
+        <div className="fields2">
+          <label className="field"><span>סוג עבודה</span>
+            <select value={f.v.kind} onChange={f.set('kind')}>{WORK_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}</select>
+          </label>
+          <label className="field"><span>כמה דקות</span><input inputMode="numeric" value={f.v.minutes} onChange={f.set('minutes')} /></label>
+        </div>
+        <label className="field"><span>התחלה</span><input type="datetime-local" value={f.v.started} onChange={f.set('started')} /></label>
+        <label className="field"><span>הערה</span><input value={f.v.notes} onChange={f.set('notes')} /></label>
+      </FormShell>
+    </Modal>
+  )
+}
+
+// ---------------- תזכורת ----------------
+export function ReminderForm({ clientId, onClose }: { clientId?: string; onClose(): void }) {
+  const { bump } = useStore()
+  const f = useForm({ text: '', client_id: clientId ?? '', due: '' })
+  const save = () => f.run(async () => {
+    if (!f.v.text.trim()) throw new ApiError('מה להזכיר?', 400)
+    await api.post('/reminders', { text: f.v.text, client_id: f.v.client_id || null, due_at: f.v.due ? fromLocalInput(f.v.due) : null })
+    bump(); onClose()
+  })
+  return (
+    <Modal title="תזכורת חדשה" onClose={onClose}>
+      <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
+        <label className="field"><span>מה להזכיר</span><input value={f.v.text} onChange={f.set('text')} /></label>
+        <ClientSelect value={f.v.client_id} onChange={v => f.setV(s => ({ ...s, client_id: v }))} allowNone="כללי" />
+        <label className="field"><span>עד מתי (לא חובה)</span><input type="datetime-local" value={f.v.due} onChange={f.set('due')} /></label>
+      </FormShell>
+    </Modal>
+  )
+}

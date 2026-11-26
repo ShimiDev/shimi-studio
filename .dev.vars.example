@@ -1,0 +1,3 @@
+# העתיקו ל-.dev.vars לפיתוח מקומי בלבד. הקובץ .dev.vars לא נכנס ל-git.
+# מדלג על בדיקת Cloudflare Access במחשב המקומי. לעולם לא בפרודקשן.
+DEV_BYPASS_AUTH=true

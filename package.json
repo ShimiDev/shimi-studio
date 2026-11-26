@@ -1,0 +1,36 @@
+{
+  "name": "shimi-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "db:migrate:local": "wrangler d1 migrations apply shimi-studio-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply shimi-studio-db --remote",
+    "db:seed:local": "wrangler d1 execute shimi-studio-db --local --file=seed/demo.sql",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types worker/worker-configuration.d.ts",
+    "cf:deploy": "wrangler d1 migrations apply shimi-studio-db --remote && wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.22",
+    "jose": "^6.2.18",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.160.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.70.2",
+    "@cloudflare/workers-types": "^5.20261125.1",
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.160.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "5.9",
+    "vite": "^8.4.0",
+    "wrangler": "^4.168.0"
+  }
+}
