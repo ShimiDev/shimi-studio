@@ -1,4 +1,4 @@
-// מסך הלקוחות: רשת כרטיסים רגילה ונוחה. לחיצה על כרטיס מוציאה את הדמות לחדר ההקלטה.
+// מסך הלקוחות: רשת כרטיסים. לחיצה על כרטיס פותחת את כרטיס הלקוח, ו"לחדר" מוציא את הדמות לחדר ההקלטה.
 import { useMemo, useState } from 'react'
 import { useStore, useData } from '../store'
 import { avatar, walkOut } from '../three/overlay'
@@ -55,9 +55,9 @@ export function ClientsPage() {
           const img = avatar(c)
           return (
             <div key={c.id} className={`card${working ? ' working' : ''}`} style={wk ? { ['--wc' as string]: wk.color } : undefined}
-              role="button" tabIndex={0} aria-label={`כניסה לחדר עם ${c.name}`}
-              onClick={e => !(e.target as HTMLElement).closest('.quick') && enter(c, e.currentTarget)}
-              onKeyDown={e => e.key === 'Enter' && e.target === e.currentTarget && enter(c, e.currentTarget)}>
+              role="button" tabIndex={0} aria-label={`כרטיס הלקוח של ${c.name}`}
+              onClick={e => !(e.target as HTMLElement).closest('.quick, .go') && go({ page: 'client', clientId: c.id })}
+              onKeyDown={e => e.key === 'Enter' && e.target === e.currentTarget && go({ page: 'client', clientId: c.id })}>
               <div className="ava" style={{ background: `linear-gradient(160deg, ${c.color_a}33, ${c.color_b}44)` }}>
                 {img && <img src={img} alt="" />}
                 <div className="eq"><span /><span /><span /><span /></div>
@@ -77,10 +77,8 @@ export function ClientsPage() {
                   onClick={e => { e.stopPropagation(); if (working) stopClock(); else setMenu({ el: e.currentTarget, c }) }}>
                   {working ? `${wk!.label} · רץ` : '⏱ שעון עבודה'}
                 </button>
-                <span className="go">
-                  <button className="go-alt quick" type="button" onClick={e => { e.stopPropagation(); go({ page: 'client', clientId: c.id }) }}>כרטיס לקוח</button>
-                  לחדר ←
-                </span>
+                <button className="go" type="button" aria-label={`כניסה לחדר עם ${c.name}`}
+                  onClick={e => { e.stopPropagation(); enter(c, e.currentTarget.closest('.card') as HTMLElement) }}>לחדר ←</button>
               </div>
             </div>
           )
