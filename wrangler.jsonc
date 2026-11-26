@@ -1,0 +1,29 @@
+// הגדרות Cloudflare: Worker אחד שמגיש גם את האתר (web/) וגם את ה-API (worker/)
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shimi-studio",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // האתר עצמו: קבצים סטטיים. כל נתיב שאינו /api מוחזר ל-index.html (אפליקציית עמוד יחיד)
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shimi-studio-db",
+      // יוחלף במזהה האמיתי אחרי `wrangler d1 create shimi-studio-db`
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // דומיין הצוות של Cloudflare Access, למשל shimi.cloudflareaccess.com
+    "ACCESS_TEAM_DOMAIN": "",
+    // ה-AUD של אפליקציית ה-Access (לא סוד, אבל חובה)
+    "ACCESS_AUD": ""
+  },
+  "observability": { "enabled": true }
+}
