@@ -70,7 +70,11 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
     try { room.current = createLiveRoom(canvas.current) } catch { room.current = null }
     return () => { room.current?.dispose(); room.current = null }
   }, [gl])
-  useEffect(() => { room.current?.setClient(roomClient) }, [roomKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // נכנס עכשיו = הולך מהדלת. כבר היה בחדר (חוזרים למסך) = כבר במקום
+  useEffect(() => {
+    if (!roomClient) { room.current?.setClient(null); return }
+    room.current?.setClient(roomClient, { instant: !!clientId && !S.takeFreshEntry(clientId), rec: isRec, work: working })
+  }, [roomKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { room.current?.setWork(working, roomClient) }, [working, roomKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { room.current?.setRec(isRec) }, [isRec])
 
@@ -268,9 +272,8 @@ function ClientPanel({ d, onAction }: { d: Detail; onAction(a: Dialog): void }) 
 }
 
 function Reminders({ items }: { items: Dashboard['reminders'] }) {
-  const { bump, fail } = useStore()
+  const { bump, fail, toast } = useStore()
   if (!items.length) return <div className="mute">אין תזכורות פתוחות.</div>
-  const { toast } = useStore()
   // אפשר לבטל: התזכורת נעלמת מהרשימה, אז נותנים כמה שניות להחזיר אותה
   const done = async (id: string) => {
     try {

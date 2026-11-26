@@ -5,7 +5,8 @@ import { makeChar, memberColors, idlePose, walkPose, REDUCED, type Char } from '
 
 export interface RoomClient { color_a: string; color_b: string; is_group: number | null }
 export interface LiveRoom {
-  setClient(c: RoomClient | null): void
+  /** instant: הלקוח כבר בחדר (חוזרים לחדר הבקרה), אז הוא כבר במקומו ולא נכנס מהדלת */
+  setClient(c: RoomClient | null, opts?: { instant?: boolean; rec?: boolean; work?: boolean }): void
   setWork(on: boolean, c?: RoomClient | null): void
   setRec(on: boolean): void
   /** סיום סשן: כל הדמויות יוצאות מהדלת, ואז onDone */
@@ -190,13 +191,15 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
 
   // ---------- הדמויות ----------
   let crew: Member[] = [], mixR = 0, mixW = 0, workOn = false, recOn = false, cur: RoomClient | null = null
+  // חזרה לחדר בלי הקלטה: הלקוח יושב על הכיסא בצד עד שמתחילים להקליט
+  let idleSeat = false
   const STOOL = new THREE.Vector3(-2.4, 0, -.2), DOOR = new THREE.Vector3(4.1, 0, -1.6), MICP = new THREE.Vector3(0, 0, .86)
   const faceMic = (x: number, z: number) => Math.atan2(MICP.x - x, MICP.z - z)
   const REC1: Spot[] = [{ p: new THREE.Vector3(0, 0, .15), f: 0 }]
   const REC3: Spot[] = [{ p: new THREE.Vector3(-.62, 0, .38), f: faceMic(-.62, .38) }, { p: new THREE.Vector3(0, 0, .12), f: 0 }, { p: new THREE.Vector3(.62, 0, .38), f: faceMic(.62, .38) }]
   const WORK1: Spot[] = [{ p: STOOL.clone(), sit: true }]
   const WORK3: Spot[] = [{ p: STOOL.clone(), sit: true }, { p: new THREE.Vector3(1.55, 0, -1.45), f: .35 }, { p: new THREE.Vector3(2.2, 0, -1.2), f: -.3 }]
-  const spots = () => { const g = !!cur?.is_group; return workOn ? (g ? WORK3 : WORK1) : (g ? REC3 : REC1) }
+  const spots = () => { const g = !!cur?.is_group; return workOn || (idleSeat && !recOn) ? (g ? WORK3 : WORK1) : (g ? REC3 : REC1) }
 
   // אקולייזר צף במצב עבודה
   const eq = new THREE.Group(); eq.position.set(0, 2.3, -2.0); scene.add(eq)
@@ -206,20 +209,30 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
   const night = new THREE.PointLight(0x4d7bff, 0, 10); night.position.set(0, 2.6, 1.5); scene.add(night)
 
   const sendTo = (m: Member, spot: Spot, dur: number, delay = 0) => {
+    if (m.seated) { m.ch.position.y = 0; const u = m.ch.userData; u.legs[0].rotation.x = u.legs[1].rotation.x = 0 }
     const from = m.ch.position.clone(); from.y = 0; m.seated = false; m.spot = spot
     m.walk = { t0: performance.now() + delay, dur: REDUCED ? 1 : dur, from, mid: from.clone().lerp(spot.p, .5).add(new THREE.Vector3(.3, 0, .5)), to: spot.p.clone() }
   }
   const sameClient = (a: RoomClient | null, b: RoomClient | null) =>
     !!a && !!b && a.color_a === b.color_a && a.color_b === b.color_b && !!a.is_group === !!b.is_group
 
-  function setClient(c: RoomClient | null) {
+  function setClient(c: RoomClient | null, opts: { instant?: boolean; rec?: boolean; work?: boolean } = {}) {
     if (sameClient(c, cur) && crew.length) return
     crew.forEach(m => scene.remove(m.ch)); crew = []; cur = c
     if (!c) return
+    if (opts.instant) { recOn = !!opts.rec; workOn = !!opts.work }
+    idleSeat = !!opts.instant && !recOn
     const sp = spots()
     memberColors(c).forEach((cc, i) => {
-      const ch = makeChar(cc[0], cc[1], { phones: true }); ch.position.copy(DOOR); ch.rotation.y = -Math.PI / 2; scene.add(ch)
-      crew.push({ ch, i, spot: sp[i], walk: { t0: performance.now() + i * 550, dur: REDUCED ? 1 : 2800, from: DOOR.clone(), mid: new THREE.Vector3(1.6, 0, -.2 + i * .15), to: sp[i].p.clone() } })
+      const ch = makeChar(cc[0], cc[1], { phones: true }); scene.add(ch)
+      if (opts.instant) {
+        // כבר בפנים: עומד ליד המיקרופון בהקלטה, או יושב על הכיסא בצד
+        ch.position.copy(sp[i].p); ch.rotation.y = sp[i].f ?? .35
+        crew.push({ ch, i, spot: sp[i], seated: !!sp[i].sit, walk: null })
+      } else {
+        ch.position.copy(DOOR); ch.rotation.y = -Math.PI / 2
+        crew.push({ ch, i, spot: sp[i], walk: { t0: performance.now() + i * 550, dur: REDUCED ? 1 : 2800, from: DOOR.clone(), mid: new THREE.Vector3(1.6, 0, -.2 + i * .15), to: sp[i].p.clone() } })
+      }
     })
   }
   let leaveDone: (() => void) | null = null
@@ -236,7 +249,8 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
     if (workOn === on && !c) return
     workOn = on
     if (on && c) { const a = new THREE.Color(c.color_a), b = new THREE.Color(c.color_b); bars.forEach((m, i) => m.material.color.copy(a).lerp(b, i / (bars.length - 1))) }
-    const sp = spots(); crew.forEach((m, i) => sendTo(m, sp[i], 1800, i * 300))
+    // מי שכבר במקום הנכון נשאר שם (למשל חזרה לחדר כששעון העבודה כבר רץ)
+    const sp = spots(); crew.forEach((m, i) => { if (m.spot !== sp[i] || m.walk) sendTo(m, sp[i], 1800, i * 300) })
   }
 
   const resize = () => { const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return; r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix() }
@@ -291,7 +305,13 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
 
   return {
     setClient, setWork, leave,
-    setRec(on) { recOn = on },
+    setRec(on) {
+      if (on === recOn) return
+      recOn = on
+      // יושב בצד ומתחילים להקליט: קם והולך למיקרופון. אחרי ההקלטה נשאר שם
+      if (on && idleSeat && !workOn) { const sp = spots(); crew.forEach((m, i) => sendTo(m, sp[i], 1800, i * 300)) }
+      if (on) idleSeat = false
+    },
     dispose() {
       alive = false; cancelAnimationFrame(raf); ro.disconnect()
       scene.traverse(o => {

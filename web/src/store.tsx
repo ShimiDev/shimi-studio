@@ -22,6 +22,8 @@ interface Store {
   inRoom: string | null
   /** סיום סשן: עוצר שעון שרץ על הלקוח, מוציא אותו מהחדר ומחזיר לרשת הלקוחות */
   endSession(clientId: string): Promise<void>
+  /** true פעם אחת אם הלקוח נכנס לחדר עכשיו (אז הדמות נכנסת מהדלת). false = הוא כבר היה בחדר */
+  takeFreshEntry(clientId: string): boolean
   /** לקוח שבדרך חזרה לכרטיס שלו (לאנימציה במסך הלקוחות) */
   returning: string | null
   doneReturning(): void
@@ -78,9 +80,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // השעון: הזמן האמיתי בשרת. כאן רק מתקתקים כל שנייה ומסנכרנים כל 30 שניות
   // מי בחדר נשמר בשרת, כדי שכל מכשיר ולשונית יראו אותו דבר
   const [lastRoom, setLastRoom] = useState<string | null>(null)
+  const [roomLoaded, setRoomLoaded] = useState(false)
+  const fresh = useRef<string | null>(null)
   const refresh = useCallback(() => Promise.all([
     api.get<RunningClock | null>('/clock').then(setClock).catch(() => {}),
-    api.get<{ client_id: string | null }>('/clock/room').then(r => setLastRoom(r.client_id)).catch(() => {}),
+    api.get<{ client_id: string | null }>('/clock/room').then(r => { setLastRoom(r.client_id); setRoomLoaded(true) }).catch(() => setRoomLoaded(true)),
   ]), [])
   useEffect(() => { refresh(); const i = setInterval(refresh, 30000); return () => clearInterval(i) }, [refresh])
   useEffect(() => { if (!clock) return; const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i) }, [clock])
@@ -145,6 +149,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const inRoom = recClient ?? lastRoom
   useEffect(() => {
     if (route.page !== 'control') { ended.current = null; return }
+    // מחכים לדעת מי בחדר לפני שמחליטים, אחרי רענון הדף
+    if (!roomLoaded) return
     if (!route.clientId || route.clientId === inRoom || route.clientId === ended.current) return
     // כבר יש מישהו בחדר: לא מכניסים עוד לקוח עד שמסיימים את הסשן
     if (inRoom) {
@@ -153,12 +159,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return
     }
     const id = route.clientId
+    fresh.current = id
     setLastRoom(id)
     api.put('/clock/room', { client_id: id }).catch(e => {
       // מכשיר אחר כבר הכניס לקוח: מראים מי בחדר
       fail(e); refresh().then(() => go({ page: 'control' }))
     })
-  }, [route, inRoom, toast, go, fail, refresh])
+  }, [route, inRoom, toast, go, fail, refresh, roomLoaded])
+  const takeFreshEntry = useCallback((id: string) => { const f = fresh.current === id; if (f) fresh.current = null; return f }, [])
   const [returning, setReturning] = useState<string | null>(null)
   const endSession = useCallback(async (clientId: string) => {
     if (clock && clock.client_id === clientId) await stopClock()
@@ -171,9 +179,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const doneReturning = useCallback(() => setReturning(null), [])
 
   const value = useMemo<Store>(() => ({
-    inRoom, endSession, returning, doneReturning, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock,
+    inRoom, takeFreshEntry, endSession, returning, doneReturning, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock,
     privacy, isRec, isSolo, revealed, setRevealed, version, bump, fail,
-  }), [inRoom, endSession, returning, doneReturning, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock, privacy, isRec, isSolo, revealed, setRevealed, version, bump, fail])
+  }), [inRoom, takeFreshEntry, endSession, returning, doneReturning, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock, privacy, isRec, isSolo, revealed, setRevealed, version, bump, fail])
 
   return (
     <Ctx.Provider value={value}>
