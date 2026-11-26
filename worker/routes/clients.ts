@@ -3,7 +3,7 @@ import type { AppEnv } from '../env'
 import { all, first, run, uid, must, nowIso, fail } from '../lib/db'
 import { body, str, oneOf, int, color, bool, num } from '../lib/validate'
 import { israelDayRange } from '../../shared/time'
-import type { Appointment, Charge, Client, ClientSummary, Payment, Project, TimeEntry } from '../../shared/types'
+import type { Appointment, Charge, Client, ClientSummary, Payment, Project, TimeEntry, Note, Reminder } from '../../shared/types'
 
 const KINDS = ['artist', 'band', 'choir', 'podcast', 'other'] as const
 const BILLING = ['hourly', 'per_song', 'fixed'] as const
@@ -56,7 +56,7 @@ clients.get('/:id', async c => {
   const id = c.req.param('id')
   const [d0, d1] = israelDayRange()
   const client = must(await first<ClientSummary>(c.env.DB, `${SUMMARY_SQL} WHERE c.id = ?4`, nowIso(), d0, d1, id), 'הלקוח לא נמצא')
-  const [projects, time, charges, payments, appts, allAppts, totals] = await Promise.all([
+  const [projects, time, charges, payments, appts, allAppts, totals, notes, tasks] = await Promise.all([
     all<Project & { seconds: number; charged: number }>(c.env.DB,
       `SELECT p.*,
          (SELECT COALESCE(SUM(${SECONDS_SQL}),0) FROM time_entries WHERE project_id = p.id AND ended_at IS NOT NULL) AS seconds,
@@ -71,8 +71,10 @@ clients.get('/:id', async c => {
       `SELECT (SELECT COALESCE(SUM(amount),0) FROM charges WHERE client_id = ?1) AS charged,
               (SELECT COALESCE(SUM(amount),0) FROM payments WHERE client_id = ?1) AS paid,
               (SELECT COUNT(*) FROM time_entries WHERE client_id = ?1) AS sessions`, id),
+    all<Note>(c.env.DB, `SELECT * FROM notes WHERE client_id = ? ORDER BY created_at DESC LIMIT 200`, id),
+    all<Reminder>(c.env.DB, `SELECT * FROM reminders WHERE client_id = ? ORDER BY done_at IS NOT NULL, created_at DESC LIMIT 200`, id),
   ])
-  return c.json({ client, projects, time, charges, payments, appointments: appts, all_appointments: allAppts, totals })
+  return c.json({ client, projects, time, charges, payments, appointments: appts, all_appointments: allAppts, totals, notes, tasks })
 })
 
 function clientFields(b: Record<string, unknown>, partial: boolean) {

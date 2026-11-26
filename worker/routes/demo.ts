@@ -185,7 +185,14 @@ function build(now = new Date()) {
     { id: 'r6', client_id: 'erev', text: 'לגבות את חודש שעבר מהפודקאסט', due_at: null, done_at: at(-20, 12) },
   ]
 
-  return { clients, products, projects, time, charges, payments, expenses, appts, reminders, at }
+  const notes: Row[] = [
+    { id: 'n1', client_id: 'noa', text: 'בשיר 6 הטייק השלישי הכי טוב בפזמון. לשמור את הנשימה בהתחלה.', created_at: at(-2, 12) },
+    { id: 'n2', client_id: 'noa', text: 'רוצה יותר ריוורב על הקול בגשר, בסגנון האלבום הקודם שלה.', created_at: at(-2, 13) },
+    { id: 'n3', client_id: 'dana', text: 'הילדים מתעייפים אחרי שעה. לתכנן הפסקה באמצע.', created_at: at(-6, 11) },
+    { id: 'n4', client_id: 'hatzer', text: 'הבסיסט מביא בפעם הבאה את הבס הפרטי שלו.', created_at: at(-9, 17) },
+  ]
+
+  return { clients, products, projects, time, charges, payments, expenses, appts, reminders, notes, at }
 }
 
 /** מוסיף את הקידומת לכל מזהה ולכל הפניה למזהה */
@@ -201,7 +208,7 @@ function insert(db: D1Database, table: string, row: Row) {
 }
 
 // סדר המחיקה: קודם מה שמפנה לאחרים
-const TABLES = ['time_entries', 'appointments', 'reminders', 'payments', 'charges', 'products', 'expenses', 'projects', 'clients'] as const
+const TABLES = ['notes', 'time_entries', 'appointments', 'reminders', 'payments', 'charges', 'products', 'expenses', 'projects', 'clients'] as const
 
 export const demo = new Hono<AppEnv>()
 
@@ -227,6 +234,7 @@ demo.post('/', async c => {
   for (const r of d.expenses) stmts.push(insert(db, 'expenses', prefixed(r, ['id'])))
   for (const r of d.appts) stmts.push(insert(db, 'appointments', prefixed(r, ['id', 'client_id', 'project_id'])))
   for (const r of d.reminders) stmts.push(insert(db, 'reminders', prefixed(r, ['id', 'client_id'])))
+  for (const r of d.notes) stmts.push(insert(db, 'notes', prefixed(r, ['id', 'client_id'])))
   await db.batch(stmts)
   return c.json({ loaded: true, clients: d.clients.length, sessions: d.time.length })
 })

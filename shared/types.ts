@@ -143,6 +143,16 @@ export interface Reminder {
   due_at: string | null
   done_at: string | null
   client_name?: string | null
+  time_entry_id?: string | null
+  created_at?: string
+}
+
+export interface Note {
+  id: string
+  client_id: string | null
+  time_entry_id: string | null
+  text: string
+  created_at: string
 }
 
 export interface Settings {

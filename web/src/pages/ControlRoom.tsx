@@ -11,6 +11,7 @@ import { hasWebGL } from '../three/character'
 import { avatar } from '../three/overlay'
 import { money, hours, clock as fmtClock, time, when, date, dayLong } from '../format'
 import { WorkMenu } from '../components/WorkMenu'
+import { QuickNote } from '../components/QuickNote'
 import { PaymentForm, ChargeForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
 import {
   CLIENT_KINDS, workKind,
@@ -37,6 +38,7 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   const c = detail.data?.client.id === clientId ? detail.data?.client : undefined
   const [dialog, setDialog] = useState<Dialog>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
+  const [noteEl, setNoteEl] = useState<HTMLElement | null>(null)
 
   // הדמות בחלון צריכה רק צבעים. בזמן REC לוקחים אותם מהשעון ולא מהנתונים המוסתרים
   const fresh = clock && clock.client_id === clientId && clock.color_a
@@ -82,6 +84,9 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
     setMenuEl(el)
   }
   const name = c?.name ?? (clock?.client_id === clientId ? clock?.client_name : null)
+  // הערה מהסשן: נשמרת על הלקוח שבחדר, ועל השעון אם הוא רץ עליו (או על סשן פרטי)
+  const noteEntry = clock && (clock.client_id === (clientId ?? null) || (!clientId && isSolo)) ? clock.id : null
+  const canNote = !!clientId || !!noteEntry
 
   // מה כתוב על השולחן
   let deskTitle = name ?? 'אין לקוח בחדר'
@@ -140,6 +145,12 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
               <button className="btn small ghost" type="button" onClick={clock!.paused_at ? S.resumeClock : S.pauseClock}>{clock!.paused_at ? '▶ המשך' : '❚❚ השהיה'}</button>
             )}
             <button className="recbtn" type="button" onClick={rec} aria-label={isRec ? 'עצירת הקלטה' : clientId ? `התחלת הקלטה עם ${name ?? 'הלקוח'}` : 'התחלת סשן פרטי'}>{isRec ? '■' : 'REC'}</button>
+            {canNote && (
+              <button className="btn small notebtn" type="button" aria-haspopup="dialog" aria-expanded={!!noteEl}
+                onClick={e => setNoteEl(noteEl ? null : e.currentTarget)}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></svg>הערה
+              </button>
+            )}
             {isRec && !isSolo && (
               <button className="reveal" type="button" onClick={() => S.setRevealed(!revealed)}>{revealed ? 'הסתר נתונים' : 'הצג נתונים'}</button>
             )}
@@ -175,6 +186,9 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
         </div>
       </div>
 
+      {noteEl && canNote && <QuickNote anchor={noteEl} clientId={clientId ?? null} entryId={noteEntry}
+        title={isRec ? (isSolo ? 'הערה לסשן הפרטי' : `הערה מההקלטה של ${clock?.client_name ?? ''}`) : `הערה על ${name ?? 'הלקוח'}`}
+        onClose={() => setNoteEl(null)} />}
       {menuEl && clientId && <WorkMenu anchor={menuEl} title={`שעון עבודה ל${name ?? ''}`} onClose={() => setMenuEl(null)} onPick={k => S.startClock(k, clientId)} />}
       {dialog === 'pay' && <PaymentForm clientId={clientId} onClose={() => setDialog(null)} />}
       {dialog === 'charge' && clientId && <ChargeForm clientId={clientId} onClose={() => setDialog(null)} />}

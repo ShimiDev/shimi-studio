@@ -5,11 +5,12 @@ import { useStore, useData } from '../store'
 import { avatar } from '../three/overlay'
 import { money, hours, time, date, when, spoken } from '../format'
 import { WorkMenu, ActionMenu } from '../components/WorkMenu'
+import { QuickNote } from '../components/QuickNote'
 import { PaymentForm, ChargeForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
 import { entrySeconds } from '../../../shared/time'
 import {
   CLIENT_KINDS, PAY_METHODS, BILLING_MODES, workKind,
-  type ClientSummary, type Project, type TimeEntry, type Charge, type Payment, type Appointment, type Client,
+  type ClientSummary, type Note, type Reminder, type Project, type TimeEntry, type Charge, type Payment, type Appointment, type Client,
 } from '../../../shared/types'
 
 export interface ClientDetail {
@@ -21,8 +22,10 @@ export interface ClientDetail {
   appointments: Appointment[]
   all_appointments: Appointment[]
   totals: { charged: number; paid: number; sessions: number }
+  notes: Note[]
+  tasks: Reminder[]
 }
-type Tab = 'appts' | 'time' | 'ledger'
+type Tab = 'notes' | 'appts' | 'time' | 'ledger'
 type Dialog = null | 'pay' | 'charge' | 'appt' | 'time' | 'edit' | 'project' | 'reminder'
 
 /** מספר ישראלי → קישור וואטסאפ */
@@ -39,16 +42,20 @@ const Ico = {
 export function ClientPage({ clientId }: { clientId: string }) {
   const S = useStore()
   const { data: d } = useData<ClientDetail>(`/clients/${clientId}`)
-  const [tab, setTab] = useState<Tab>('appts')
+  const [tab, setTab] = useState<Tab>('notes')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [appt, setAppt] = useState<Appointment | null>(null)
   const [project, setProject] = useState<Project | null>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
   const [moreEl, setMoreEl] = useState<HTMLElement | null>(null)
+  const [noteEl, setNoteEl] = useState<HTMLElement | null>(null)
 
   const del = async (path: string, msg: string) => {
     if (!confirm(msg)) return
     try { await api.del(path); S.bump(); S.toast('נמחק') } catch (e) { S.fail(e) }
+  }
+  const toggleTask = async (t: Reminder) => {
+    try { await api.patch(`/reminders/${t.id}`, { done: !t.done_at }); S.bump() } catch (e) { S.fail(e) }
   }
 
   // חשבון: חיובים ותשלומים לפי סדר, עם יתרה מצטברת
@@ -79,7 +86,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
     ['תזכורת על הלקוח', () => setDialog('reminder')],
     ['עריכת פרטים', () => setDialog('edit')],
   ]
-  const tabs: [Tab, string, number][] = [['appts', 'תורים', d.all_appointments.length], ['time', 'סשנים', d.time.length], ['ledger', 'חשבון', ledger.length]]
+  const openTasks = d.tasks.filter(t => !t.done_at)
+  const doneTasks = d.tasks.filter(t => t.done_at)
+  const tabs: [Tab, string, number][] = [['notes', 'הערות ומשימות', d.notes.length + openTasks.length], ['appts', 'תורים', d.all_appointments.length], ['time', 'סשנים', d.time.length], ['ledger', 'חשבון', ledger.length]]
 
   return (
     <div className="cp">
@@ -139,6 +148,22 @@ export function ClientPage({ clientId }: { clientId: string }) {
           </div>
         </div>
 
+        {tab === 'notes' && <div>
+          <button className="btn small" type="button" aria-haspopup="dialog" onClick={e => setNoteEl(noteEl ? null : e.currentTarget)}>+ הערה או משימה</button>
+          {openTasks.length > 0 && <><div className="cp-sub">משימות פתוחות</div>
+            {openTasks.map(t => <label key={t.id} className="cp-task"><input type="checkbox" checked={false} onChange={() => toggleTask(t)} />
+              <span className="grow">{t.text}</span>{t.due_at && <span className="mute nowrap">עד {when(t.due_at)}</span>}</label>)}</>}
+          {d.notes.length > 0 && <><div className="cp-sub">הערות</div>
+            <div className="cp-rows">{d.notes.map(n => <div key={n.id} className="cp-row cp-note-row">
+              <span className="nowrap mute">{date(n.created_at)}</span>
+              <span className="grow">{n.text}</span>
+              <button className="btn small ghost" type="button" onClick={() => del(`/notes/${n.id}`, 'למחוק את ההערה?')}>מחיקה</button>
+            </div>)}</div></>}
+          {doneTasks.length > 0 && <details className="cp-done"><summary className="cp-sub">משימות שבוצעו ({doneTasks.length})</summary>
+            {doneTasks.map(t => <label key={t.id} className="cp-task done"><input type="checkbox" checked onChange={() => toggleTask(t)} /><span className="grow">{t.text}</span></label>)}</details>}
+          {!d.notes.length && !d.tasks.length && <div className="empty">אין עדיין הערות או משימות. אפשר להוסיף גם מחדר הבקרה, תוך כדי הקלטה.</div>}
+        </div>}
+
         {tab === 'appts' && (d.all_appointments.length ? <div className="cp-rows">
           {d.all_appointments.map(a => {
             const past = a.starts_at < now
@@ -172,6 +197,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
       </section>
 
       {menuEl && <WorkMenu anchor={menuEl} title={`שעון עבודה ל${c.name}`} onClose={() => setMenuEl(null)} onPick={k => S.startClock(k, c.id)} />}
+      {noteEl && <QuickNote anchor={noteEl} clientId={c.id} entryId={null} title={`הערה על ${c.name}`} onClose={() => setNoteEl(null)} />}
       {moreEl && <ActionMenu anchor={moreEl} items={more} onClose={() => setMoreEl(null)} />}
       {dialog === 'pay' && <PaymentForm clientId={c.id} onClose={() => setDialog(null)} />}
       {dialog === 'charge' && <ChargeForm clientId={c.id} onClose={() => setDialog(null)} />}

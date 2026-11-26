@@ -182,7 +182,7 @@ h1.page { font-family: var(--f-display); font-weight: 700; font-size: 22px; marg
 .recinfo b { display: block; font-family: var(--f-display); font-size: 18px }
 .recinfo small { color: var(--mute) }
 .rectime { font-family: var(--f-mono); font-size: 30px; direction: ltr; color: #5f5960; font-variant-numeric: tabular-nums }
-.reveal { border: 0; background: transparent; color: #57525a; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; position: absolute; bottom: 4px; inset-inline-start: 18px }
+.reveal { border: 0; background: transparent; color: #57525a; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; padding: 4px }
 .workbtn { border: 1px solid rgba(201, 164, 106, .4); background: rgba(201, 164, 106, .08); color: var(--gold-hi); border-radius: var(--r-pill); padding: 10px 16px; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; flex: 0 0 auto }
 .workbtn .wdot { width: 9px; height: 9px; border-radius: 50%; background: currentColor }
 .app.work .workbtn { background: var(--wc); color: #0b0a0c; border-color: transparent }
@@ -433,3 +433,23 @@ button.cp-row:hover { background: var(--panel2) }
   .cp-actions .btn { justify-content: center; text-align: center }
   .cp-actions .btn.primary { grid-column: 1 / -1 }
 }
+
+/* הערה מהירה בסשן */
+.desk .notebtn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap }
+.desk .notebtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round }
+.qn { position: fixed; z-index: 46; width: min(420px, calc(100vw - 16px)); background: #221e23; border: 1px solid var(--line2); border-radius: 16px; padding: 14px; box-shadow: var(--shadow-pop); display: grid; gap: 10px }
+.qn-head { display: flex; justify-content: space-between; align-items: center; gap: 10px }
+.qn-head b { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.qn textarea { width: 100%; resize: vertical; min-height: 76px; font-size: 16px; line-height: 1.5 }
+.qn-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px }
+.qn-list { list-style: none; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: grid; gap: 6px; max-height: 180px; overflow-y: auto }
+.qn-list li { display: flex; gap: 8px; align-items: center; font-size: 13.5px }
+.qn-list .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.cp-task { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 4px 6px; border-bottom: 1px solid var(--line); font-size: 14px; cursor: pointer }
+.cp-task input { width: 18px; height: 18px; accent-color: var(--gold); flex: none }
+.cp-task.done .grow { text-decoration: line-through; color: var(--mute) }
+.cp-task .grow { flex: 1; min-width: 0 }
+.cp-sub { font-size: 12.5px; color: var(--mute); margin: 14px 0 4px }
+.cp-sub:first-child { margin-top: 0 }
+.cp-note-row .grow { white-space: normal }
+.cp-done summary { cursor: pointer; min-height: 32px }

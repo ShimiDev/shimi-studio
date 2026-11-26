@@ -13,6 +13,7 @@ import { overview } from './routes/overview'
 import { demo } from './routes/demo'
 import { email } from './routes/email'
 import { products } from './routes/products'
+import { notes } from './routes/notes'
 import { runReminders } from './lib/apptmail'
 import type { Env } from './env'
 
@@ -36,6 +37,7 @@ app.route('/settings', settings)
 app.route('/demo', demo)
 app.route('/email', email)
 app.route('/products', products)
+app.route('/notes', notes)
 app.route('/', overview)
 
 app.notFound(c => c.json({ error: 'לא נמצא' }, 404))
