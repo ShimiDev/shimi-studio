@@ -30,7 +30,14 @@ npm run db:seed:local               # לא חובה: לקוחות לדוגמה
 npm run dev                         # http://localhost:5173
 ```
 
-## העלאה ל-Cloudflare (פעם ראשונה)
+## העלאה אוטומטית מ-GitHub (Workers Builds)
+
+הריפו מחובר ל-Cloudflare, וכל דחיפה בונה ומעלה. בהגדרות ה-Worker (Settings → Build):
+
+- Build command: `npm run build`
+- Deploy command: `npm run cf:deploy` (מריץ קודם את המיגרציות על D1 ואז מעלה)
+
+## העלאה ידנית (פעם ראשונה)
 
 1. `npx wrangler login`
 2. `npx wrangler d1 create shimi-studio-db` ולהעתיק את ה-`database_id` שחוזר אל `wrangler.jsonc`.

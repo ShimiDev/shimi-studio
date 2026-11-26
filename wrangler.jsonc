@@ -14,8 +14,8 @@
     {
       "binding": "DB",
       "database_name": "shimi-studio-db",
-      // יוחלף במזהה האמיתי אחרי `wrangler d1 create shimi-studio-db`
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // המסד האמיתי ב-Cloudflare (מזהה, לא סוד)
+      "database_id": "58f5f189-7625-4713-b6b2-5fbd13c25e46",
       "migrations_dir": "migrations"
     }
   ],

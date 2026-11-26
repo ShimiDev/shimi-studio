@@ -12,7 +12,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply shimi-studio-db --remote",
     "db:seed:local": "wrangler d1 execute shimi-studio-db --local --file=seed/demo.sql",
     "deploy": "npm run build && wrangler deploy",
-    "cf-typegen": "wrangler types worker/worker-configuration.d.ts"
+    "cf-typegen": "wrangler types worker/worker-configuration.d.ts",
+    "cf:deploy": "wrangler d1 migrations apply shimi-studio-db --remote && wrangler deploy"
   },
   "dependencies": {
     "hono": "^4.13.22",
