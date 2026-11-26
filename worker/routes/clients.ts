@@ -3,6 +3,7 @@ import type { AppEnv } from '../env'
 import { all, first, run, uid, must, nowIso, fail } from '../lib/db'
 import { body, str, oneOf, int, color, bool, num } from '../lib/validate'
 import { israelDayRange } from '../../shared/time'
+import { getSettings } from './settings'
 import type { Appointment, Charge, Client, ClientSummary, Payment, Project, TimeEntry, Note, Reminder } from '../../shared/types'
 
 const KINDS = ['artist', 'band', 'choir', 'podcast', 'other'] as const
@@ -132,6 +133,49 @@ clients.patch('/:id', async c => {
 
 // ---------- פרויקטים ----------
 export const projects = new Hono<AppEnv>()
+
+/** סיכום פרויקט: כל הסשנים, שעות לפי סוג עבודה, שווי לפי שיטת התמחור, חיובים ותשלומים */
+projects.get('/:id', async c => {
+  const db = c.env.DB
+  const project = must(await first<Project>(db, `SELECT * FROM projects WHERE id = ?`, c.req.param('id')), 'הפרויקט לא נמצא')
+  const [client, settings, sessions, charges, payments, unassigned, notes] = await Promise.all([
+    first<Client>(db, `SELECT * FROM clients WHERE id = ?`, project.client_id),
+    getSettings(db),
+    all<TimeEntry & { seconds: number }>(db,
+      `SELECT *, CASE WHEN ended_at IS NULL THEN NULL ELSE ${SECONDS_SQL} END AS seconds FROM time_entries WHERE project_id = ? ORDER BY started_at`, project.id),
+    all<Charge>(db, `SELECT * FROM charges WHERE project_id = ? ORDER BY charged_at`, project.id),
+    all<Payment>(db, `SELECT * FROM payments WHERE project_id = ? ORDER BY paid_at`, project.id),
+    first<{ n: number; seconds: number }>(db,
+      `SELECT COUNT(*) AS n, COALESCE(SUM(${SECONDS_SQL}),0) AS seconds FROM time_entries
+       WHERE client_id = ? AND project_id IS NULL AND charge_id IS NULL AND ended_at IS NOT NULL`, project.client_id),
+    all<Note>(db, `SELECT n.* FROM notes n JOIN time_entries t ON t.id = n.time_entry_id WHERE t.project_id = ? ORDER BY n.created_at`, project.id),
+  ])
+  const mode = project.billing_mode ?? settings.billing_mode
+  const rate = mode === 'hourly' ? project.unit_price ?? client?.hourly_rate ?? settings.default_rate
+    : mode === 'per_song' ? project.unit_price ?? settings.default_rate
+    : project.quote_amount ?? project.unit_price ?? 0
+  const done = sessions.filter(t => t.ended_at)
+  const sum = (xs: { seconds: number }[]) => xs.reduce((a, t) => a + Math.max(0, t.seconds), 0)
+  const seconds = sum(done)
+  const open_seconds = sum(done.filter(t => !t.charge_id))
+  const byKind = new Map<string, { kind: string; sessions: number; seconds: number; open_seconds: number }>()
+  for (const t of done) {
+    const k = byKind.get(t.kind) ?? { kind: t.kind, sessions: 0, seconds: 0, open_seconds: 0 }
+    k.sessions++; k.seconds += Math.max(0, t.seconds); if (!t.charge_id) k.open_seconds += Math.max(0, t.seconds)
+    byKind.set(t.kind, k)
+  }
+  const charged = charges.reduce((a, x) => a + x.amount, 0)
+  const paid = payments.reduce((a, x) => a + x.amount, 0)
+  const value = mode === 'hourly' ? Math.round(seconds / 3600 * rate) : mode === 'fixed' ? rate : null
+  const open_value = mode === 'hourly' ? Math.round(open_seconds / 3600 * rate) : mode === 'fixed' ? Math.max(0, rate - charged) : null
+  return c.json({
+    project, client, mode, rate, sessions, charges, payments, notes,
+    by_kind: [...byKind.values()].sort((a, b) => b.seconds - a.seconds),
+    unassigned: unassigned ?? { n: 0, seconds: 0 },
+    running: sessions.some(t => !t.ended_at),
+    totals: { sessions: done.length, seconds, open_seconds, value, open_value, charged, paid, balance: charged - paid },
+  })
+})
 
 projects.post('/', async c => {
   const b = await body(c.req.raw)

@@ -156,9 +156,9 @@ export function ProjectForm({ clientId, project, onClose }: { clientId: string; 
 }
 
 // ---------------- תשלום ----------------
-export function PaymentForm({ clientId, onClose }: { clientId?: string; onClose(): void }) {
+export function PaymentForm({ clientId, projectId, onClose }: { clientId?: string; projectId?: string; onClose(): void }) {
   const { bump, toast } = useStore()
-  const f = useForm({ client_id: clientId ?? '', project_id: '', amount: '', method: 'transfer', paid_at: toLocalInput(new Date()), notes: '' })
+  const f = useForm({ client_id: clientId ?? '', project_id: projectId ?? '', amount: '', method: 'transfer', paid_at: toLocalInput(new Date()), notes: '' })
   const save = () => f.run(async () => {
     const amount = toAgorot(f.v.amount)
     if (!amount || amount <= 0) throw new ApiError('צריך סכום', 400)
@@ -184,9 +184,9 @@ export function PaymentForm({ clientId, onClose }: { clientId?: string; onClose(
 }
 
 // ---------------- חיוב (ידני או מתוך שעות) ----------------
-export function ChargeForm({ clientId, onClose }: { clientId: string; onClose(): void }) {
+export function ChargeForm({ clientId, projectId, onClose }: { clientId: string; projectId?: string; onClose(): void }) {
   const { bump, toast } = useStore()
-  const f = useForm({ project_id: '', mode: 'time' as 'time' | 'product' | 'manual', songs: '1', amount: '', description: '', product_id: '', qty: '1', price: '' })
+  const f = useForm({ project_id: projectId ?? '', mode: 'time' as 'time' | 'product' | 'manual', songs: '1', amount: '', description: '', product_id: '', qty: '1', price: '' })
   const [pv, setPv] = useState<ChargePreview | null>(null)
   const prods = useData<Product[]>('/products')
   // ברירת מחדל: הפרויקט הפעיל הראשון של הלקוח

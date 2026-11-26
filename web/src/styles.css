@@ -457,3 +457,29 @@ button.cp-row:hover { background: var(--panel2) }
 .room-busy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; border-radius: 14px; border: 1px dashed rgba(201,164,106,.45); color: var(--gold-hi); font-size: 14px }
 .btn[disabled] { opacity: .5; cursor: not-allowed }
 .card .go.busy:hover { background: transparent; color: var(--gold) }
+
+/* סיכום פרויקט */
+.linkish { border: 0; background: transparent; color: inherit; padding: 0; cursor: pointer; text-align: start; font: inherit }
+.linkish:hover b { color: var(--gold-hi); text-decoration: underline; text-underline-offset: 3px }
+.pj-kicker { font-size: 13px; margin-bottom: 2px }
+.pj .cp-head { align-items: flex-start }
+.pj-sum { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+.pj-sum .due small, .due-txt { color: var(--amber) }
+.pj-quote { display: grid; gap: 8px; padding: 14px 18px }
+.pj-table td.num, .pj-table th { white-space: nowrap }
+.pj-table tfoot td { font-weight: 700; border-top: 1px solid var(--line2) }
+@media (max-width: 900px) { .pj-sum { grid-template-columns: 1fr 1fr } .pj-sum > div:nth-child(3) { border-inline-start: 0 } .pj-sum > div:nth-child(n+3) { border-top: 1px solid var(--line) } }
+@media print {
+  .topbar, .no-print, .toast, nav { display: none !important }
+  body, .app, .panel, .cp-sum { background: #fff !important; color: #111 !important; box-shadow: none !important }
+  .panel, .cp-sum, .cp-sum > div { border-color: #ccc !important }
+  .mute, .cp-sum span, .cp-sum small { color: #555 !important }
+  .pill { border: 1px solid #999; background: none !important; color: #111 !important }
+  .pj section { break-inside: avoid }
+  .cp-row, .cp-row b, .panel h4, .list td { color: #111 !important }
+  .cp-row .pos { color: #0a7a3c !important }
+  .print-only { display: block !important }
+}
+.print-only { display: none }
+.pj-table th, .pj-table td, .pj-table .amt { text-align: start }
+.pj-table td.num, .pj-table .amt { direction: ltr; unicode-bidi: isolate; text-align: right }

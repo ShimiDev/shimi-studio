@@ -127,8 +127,19 @@ function build(now = new Date()) {
   charge('hatzer', 'hatzer-ep', 'מיקס לשיר × 2', 180000, -60, ['pr-mix', 2, 90000]); pay('hatzer', 'hatzer-ep', 180000, 'cash', -58)
   charge('hatzer', 'hatzer-ep', 'מיקס לשיר × 2', 180000, -14, ['pr-mix', 2, 90000]); pay('hatzer', 'hatzer-ep', 90000, 'bit', -10)
   // דנה: לפי שעה, תעריף ברירת המחדל
-  charge('dana', 'dana-kids', 'הקלטות, 8 שעות', 120000, -40); pay('dana', 'dana-kids', 120000, 'credit', -38)
-  charge('dana', 'dana-kids', 'הקלטות ועריכה, 6 שעות', 90000, -9)
+  // השעות עצמן מסומנות כמחויבות, כמו בחיוב אמיתי מתוך השעון
+  const billHours = (client: string, project: string, until: number, what: string, rate: number) => {
+    const rows = time.filter(t => t.project_id === project && !t.charge_id && Date.parse(t.started_at as string) < Date.parse(at(until, 0)))
+    const secs = rows.reduce((s, t) => s + (Date.parse(t.ended_at as string) - Date.parse(t.started_at as string)) / 1000 - (t.paused_seconds as number), 0)
+    if (!secs) return 0
+    const amount = Math.round(secs / 3600 * rate)
+    const id = charge(client, project, `${what}, ${(secs / 3600).toFixed(1)} שעות`, amount, until)
+    rows.forEach(t => { t.charge_id = id })
+    return amount
+  }
+  const dana1 = billHours('dana', 'dana-kids', -40, 'הקלטות', 15000)
+  if (dana1) pay('dana', 'dana-kids', dana1, 'credit', -38)
+  billHours('dana', 'dana-kids', -9, 'הקלטות ועריכה', 15000)
   // מקהלה: מקדמה
   charge('choir', 'choir-hanuka', 'מקדמה לאלבום חנוכה', 300000, -38); pay('choir', 'choir-hanuka', 300000, 'check', -36, "צ'ק מס' 1043")
   charge('choir', 'choir-hanuka', 'שלב שני: הקלטות', 250000, -12); pay('choir', 'choir-hanuka', 250000, 'transfer', -11)

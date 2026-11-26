@@ -75,6 +75,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const now = new Date().toISOString()
   const upcoming = d.all_appointments.filter(a => a.starts_at >= now && a.status === 'scheduled').sort((a, b) => a.starts_at.localeCompare(b.starts_at))
   const active = d.projects.filter(p => p.status === 'active')
+  const finished = d.projects.filter(p => p.status !== 'active')
   const working = S.clock && S.clock.client_id === c.id
   const owes = c.balance > 0
 
@@ -136,11 +137,15 @@ export function ClientPage({ clientId }: { clientId: string }) {
         <div><span>באולפן</span><b className="txt">{hours(c.seconds)}</b><small>{d.totals.sessions} סשנים{c.last_session ? ` · אחרון ${date(c.last_session)}` : ''}</small></div>
       </div>
 
-      {(active.length > 0 || c.notes) && (
+      {(d.projects.length > 0 || c.notes) && (
         <div className="cp-grid">
-          {active.length > 0 && <section className="panel">
-            <h4>{active.length > 1 ? 'פרויקטים פעילים' : 'פרויקט פעיל'}</h4>
-            {active.map(p => <ProjectRow key={p.id} p={p} onEdit={() => setProject(p)} />)}
+          {d.projects.length > 0 && <section className="panel">
+            <h4>{active.length > 1 ? 'פרויקטים פעילים' : active.length ? 'פרויקט פעיל' : 'פרויקטים'}</h4>
+            {active.map(p => <ProjectRow key={p.id} p={p} onEdit={() => setProject(p)} onOpen={() => S.go({ page: 'project', projectId: p.id })} />)}
+            {finished.length > 0 && <details className="cp-done" open={!active.length}><summary className="cp-sub">פרויקטים שהסתיימו ({finished.length})</summary>
+              {finished.map(p => <button key={p.id} type="button" className="cp-row" onClick={() => S.go({ page: 'project', projectId: p.id })}>
+                <span className="grow">{p.title}</span><span className="mute num">{hours(p.seconds)} · {money(p.charged)}</span></button>)}
+            </details>}
           </section>}
           {c.notes && <section className="panel">
             <h4>הערות <button className="btn small ghost" type="button" onClick={() => setDialog('edit')}>עריכה</button></h4>
@@ -221,13 +226,13 @@ export function ClientPage({ clientId }: { clientId: string }) {
   )
 }
 
-function ProjectRow({ p, onEdit }: { p: Project & { seconds: number; charged: number }; onEdit(): void }) {
+function ProjectRow({ p, onEdit, onOpen }: { p: Project & { seconds: number; charged: number }; onEdit(): void; onOpen(): void }) {
   const quote = p.quote_amount ? { now: p.charged, of: p.quote_amount, money: true } : p.quoted_hours ? { now: p.seconds / 3600, of: p.quoted_hours, money: false } : null
   return (
     <div className="cp-proj">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <b>{p.title}{p.status === 'done' && <span className="pill" style={{ marginInlineStart: 6 }}>הסתיים</span>}</b>
-        <button className="btn small ghost" type="button" onClick={onEdit}>עריכה</button>
+        <button type="button" className="linkish" onClick={onOpen}><b>{p.title}</b>{p.status === 'done' && <span className="pill" style={{ marginInlineStart: 6 }}>הסתיים</span>}</button>
+        <div className="row"><button className="btn small" type="button" onClick={onOpen}>סיכום פרויקט</button><button className="btn small ghost" type="button" onClick={onEdit}>עריכה</button></div>
       </div>
       <div className="mute" style={{ fontSize: 13 }}>
         {p.billing_mode ? BILLING_MODES[p.billing_mode] : 'תמחור לפי ההגדרות'}{p.unit_price != null && ` · ${money(p.unit_price)}`}
