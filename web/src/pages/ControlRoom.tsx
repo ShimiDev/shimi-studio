@@ -31,8 +31,8 @@ type Dialog = null | 'pay' | 'charge' | 'appt' | 'time' | 'edit' | 'project' | '
 export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   const S = useStore()
   const { clock, seconds, privacy, isRec, isSolo, revealed } = S
-  // הלקוח שבחדר: זה שנבחר בניווט, ואם אין, זה שהשעון רץ עליו
-  const clientId = routeClient ?? clock?.client_id ?? undefined
+  // הלקוח שבחדר: זה שנבחר בניווט, ואם אין, מי שכבר בחדר
+  const clientId = routeClient ?? S.inRoom ?? clock?.client_id ?? undefined
   const detail = useData<Detail>(!privacy && clientId ? `/clients/${clientId}` : null)
   const dash = useData<Dashboard>(!privacy ? '/dashboard' : null)
   const c = detail.data?.client.id === clientId ? detail.data?.client : undefined

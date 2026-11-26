@@ -11,7 +11,7 @@ type Filter = 'all' | 'today' | 'due' | 'new' | 'archived'
 const NEW_DAYS = 21
 
 export function ClientsPage() {
-  const { go, clock, startClock, stopClock, inRoom, returning, doneReturning } = useStore()
+  const { go, toast, clock, startClock, stopClock, inRoom, returning, doneReturning } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
@@ -41,8 +41,10 @@ export function ClientsPage() {
     requestAnimationFrame(() => walkBack(card.querySelector<HTMLElement>('.ava')!, c, () => setBack(null)))
   }, [returning, data, doneReturning])
 
+  const roomName = inRoom ? data?.find(x => x.id === inRoom)?.name ?? (clock?.client_id === inRoom ? clock.client_name : null) : null
   const enter = (c: ClientSummary, card: HTMLElement) => {
     if (leaving) return
+    if (inRoom && inRoom !== c.id) return
     // כבר בחדר? פשוט עוברים לשם, בלי ההליכה
     if (inRoom === c.id) { go({ page: 'control', clientId: c.id }); return }
     setLeaving(c.id)
@@ -93,8 +95,11 @@ export function ClientsPage() {
                   onClick={e => { e.stopPropagation(); if (working) stopClock(); else setMenu({ el: e.currentTarget, c }) }}>
                   {working ? `${wk!.label} · רץ` : '⏱ שעון עבודה'}
                 </button>
-                <button className="go" type="button" aria-label={`כניסה לחדר עם ${c.name}`}
-                  onClick={e => { e.stopPropagation(); enter(c, e.currentTarget.closest('.card') as HTMLElement) }}>לחדר ←</button>
+                {inRoom && inRoom !== c.id
+                  ? <button className="go busy" type="button" aria-disabled="true" title={`${roomName ?? 'לקוח אחר'} בחדר עכשיו. כדי להכניס את ${c.name}, קודם מסיימים את הסשן`}
+                      onClick={e => { e.stopPropagation(); toast(`${roomName ?? 'לקוח אחר'} בחדר עכשיו. קודם לוחצים "סיום סשן" בחדר הבקרה`, true) }}>תפוס</button>
+                  : <button className="go" type="button" aria-label={`כניסה לחדר עם ${c.name}`}
+                      onClick={e => { e.stopPropagation(); enter(c, e.currentTarget.closest('.card') as HTMLElement) }}>לחדר ←</button>}
               </div>
             </div>
           )

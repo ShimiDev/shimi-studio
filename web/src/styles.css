@@ -453,3 +453,7 @@ button.cp-row:hover { background: var(--panel2) }
 .cp-sub:first-child { margin-top: 0 }
 .cp-note-row .grow { white-space: normal }
 .cp-done summary { cursor: pointer; min-height: 32px }
+.card .go.busy { opacity: .55; cursor: not-allowed; background: transparent; border-style: dashed }
+.room-busy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; border-radius: 14px; border: 1px dashed rgba(201,164,106,.45); color: var(--gold-hi); font-size: 14px }
+.btn[disabled] { opacity: .5; cursor: not-allowed }
+.card .go.busy:hover { background: transparent; color: var(--gold) }

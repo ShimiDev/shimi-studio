@@ -33,7 +33,7 @@ function readView(): View {
 }
 
 export function CalendarPage() {
-  const { go, toast, fail, bump } = useStore()
+  const { go, toast, fail, bump, inRoom } = useStore()
   const today = israelDate()
   const [view, setView] = useState<View>(readView)
   const [anchor, setAnchor] = useState(today)
@@ -143,7 +143,9 @@ export function CalendarPage() {
         <div style={{ position: 'fixed', bottom: 20, insetInlineEnd: 20, zIndex: 55 }}>
           <div className="row">
             <button className="btn" style={{ background: 'var(--panel)' }} type="button" onClick={() => { const id = edit.appt!.client_id!; setEdit(null); go({ page: 'client', clientId: id }) }}>כרטיס {edit.appt.client_name}</button>
-            <button className="btn primary" type="button" onClick={() => { const id = edit.appt!.client_id!; setEdit(null); go({ page: 'control', clientId: id }) }}>לחדר עם {edit.appt.client_name} ←</button>
+            {inRoom && inRoom !== edit.appt.client_id
+              ? <button className="btn primary" type="button" disabled title="יש כבר לקוח בחדר. קודם מסיימים את הסשן שלו">החדר תפוס</button>
+              : <button className="btn primary" type="button" onClick={() => { const id = edit.appt!.client_id!; setEdit(null); go({ page: 'control', clientId: id }) }}>לחדר עם {edit.appt.client_name} ←</button>}
           </div>
         </div>
       )}

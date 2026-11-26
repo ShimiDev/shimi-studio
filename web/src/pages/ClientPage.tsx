@@ -109,12 +109,21 @@ export function ClientPage({ clientId }: { clientId: string }) {
           </div>
         </div>
         <div className="cp-actions">
-          <button className="btn primary" type="button" onClick={() => S.go({ page: 'control', clientId: c.id })}>לחדר ←</button>
+          {S.inRoom && S.inRoom !== c.id
+            ? <button className="btn primary" type="button" disabled title="יש כבר לקוח בחדר. קודם מסיימים את הסשן שלו">החדר תפוס</button>
+            : <button className="btn primary" type="button" onClick={() => S.go({ page: 'control', clientId: c.id })}>לחדר ←</button>}
           <button className="btn" type="button" onClick={() => setDialog('appt')}>קביעת תור</button>
           <button className={`btn ${working ? 'rec-on' : ''}`} type="button" onClick={e => working ? S.stopClock() : setMenuEl(e.currentTarget)}>{working ? `עצירת ${workKind(S.clock!.kind).label}` : 'שעון עבודה'}</button>
           <button className="icon-btn" type="button" aria-label="עוד פעולות" aria-haspopup="menu" aria-expanded={!!moreEl} onClick={e => setMoreEl(moreEl ? null : e.currentTarget)}>{Ico.more}</button>
         </div>
       </header>
+
+      {S.inRoom && S.inRoom !== c.id && (
+        <div className="room-busy" role="status">
+          <span>יש כבר לקוח בחדר. כדי להכניס את {c.name}, קודם מסיימים את הסשן הנוכחי.</span>
+          <button className="btn small" type="button" onClick={() => S.go({ page: 'control' })}>לחדר הבקרה</button>
+        </div>
+      )}
 
       <div className="cp-sum panel">
         <div className={owes ? 'due' : c.balance < 0 ? 'ok' : ''}>

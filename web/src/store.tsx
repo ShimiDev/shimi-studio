@@ -134,13 +134,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const seconds = clock ? entrySeconds(clock, now) : 0
   const [lastRoom, setLastRoom] = useState<string | null>(() => { try { return sessionStorage.getItem('in-room') } catch { return null } })
   const ended = useRef<string | null>(null)
+  // מי בחדר: מי שמקליטים איתו עכשיו, אחרת מי שנכנס אחרון ועוד לא סיים סשן.
+  // שעון מיקס/עריכה ללקוח לא מכניס אותו לחדר.
+  const recClient = clock?.kind === 'recording' && clock.is_client_present ? clock.client_id : null
+  const inRoom = recClient ?? lastRoom
   useEffect(() => {
     if (route.page !== 'control') { ended.current = null; return }
-    if (route.clientId && route.clientId !== lastRoom && route.clientId !== ended.current) {
-      setLastRoom(route.clientId); try { sessionStorage.setItem('in-room', route.clientId) } catch { /* */ }
+    if (!route.clientId || route.clientId === inRoom || route.clientId === ended.current) return
+    // כבר יש מישהו בחדר: לא מכניסים עוד לקוח עד שמסיימים את הסשן
+    if (inRoom) {
+      toast('יש כבר לקוח בחדר. כדי להכניס מישהו אחר, קודם לוחצים "סיום סשן"', true)
+      go({ page: 'control', clientId: inRoom })
+      return
     }
-  }, [route, lastRoom])
-  const inRoom = clock?.client_id ?? lastRoom
+    setLastRoom(route.clientId); try { sessionStorage.setItem('in-room', route.clientId) } catch { /* */ }
+  }, [route, inRoom, toast, go])
   const [returning, setReturning] = useState<string | null>(null)
   const endSession = useCallback(async (clientId: string) => {
     if (clock && clock.client_id === clientId) await stopClock()
