@@ -5,13 +5,13 @@ import type { AppEnv } from '../env'
 import { all, first, run, uid, nowIso, fail, must } from '../lib/db'
 import { body, str, oneOf, bool, iso, int } from '../lib/validate'
 import type { RunningClock, TimeEntry, WorkKind } from '../../shared/types'
-import { entrySeconds } from '../../shared/time'
+import { entrySeconds, israelDayRange } from '../../shared/time'
 
 const KINDS = ['recording', 'mix', 'master', 'edit', 'production'] as const
 
 const RUNNING_SQL = `
-SELECT t.*, c.name AS client_name, c.color_a, c.color_b, c.is_group
-FROM time_entries t LEFT JOIN clients c ON c.id = t.client_id
+SELECT t.*, c.name AS client_name, c.color_a, c.color_b, c.is_group, p.title AS project_title
+FROM time_entries t LEFT JOIN clients c ON c.id = t.client_id LEFT JOIN projects p ON p.id = t.project_id
 WHERE t.ended_at IS NULL LIMIT 1`
 
 // סוגר השהיה פתוחה וסוגר את השעון. ?1 = עכשיו
@@ -38,6 +38,44 @@ async function checkProject(db: D1Database, projectId: string | null, clientId: 
 export const clock = new Hono<AppEnv>()
 
 clock.get('/', async c => c.json(await first<RunningClock>(c.env.DB, RUNNING_SQL)))
+
+// ---------- מי בחדר ----------
+// נשמר בשרת ולא בדפדפן, כדי שגם טלפון או לשונית אחרת יראו שהחדר תפוס.
+// לקוח שנמחק או הועבר לארכיון כבר לא נחשב בחדר.
+async function roomClient(db: D1Database): Promise<string | null> {
+  const r = await first<{ value: string }>(db, `SELECT value FROM settings WHERE key = 'in_room'`)
+  const id = r ? JSON.parse(r.value) as string | null : null
+  if (!id) return null
+  const ok = await first(db, `SELECT id FROM clients WHERE id = ? AND archived_at IS NULL`, id)
+  return ok ? id : null
+}
+const setRoom = (db: D1Database, id: string | null) =>
+  db.prepare(`INSERT INTO settings (key, value) VALUES ('in_room', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).bind(JSON.stringify(id))
+
+clock.get('/room', async c => c.json({ client_id: await roomClient(c.env.DB) }))
+
+clock.put('/room', async c => {
+  const b = await body(c.req.raw)
+  const id = str(b, 'client_id', { required: true })!
+  must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ? AND archived_at IS NULL`, id), 'הלקוח לא נמצא')
+  const cur = await roomClient(c.env.DB)
+  if (cur && cur !== id) fail(409, 'יש כבר לקוח בחדר. כדי להכניס מישהו אחר, קודם לוחצים "סיום סשן"')
+  await setRoom(c.env.DB, id).run()
+  return c.json({ client_id: id })
+})
+
+/** סיום סשן: הלקוח יוצא מהחדר, והתורים שלו מהיום שכבר התחילו מסומנים "התקיים" */
+clock.post('/room/leave', async c => {
+  const b = await body(c.req.raw)
+  const id = str(b, 'client_id')
+  const stmts = [setRoom(c.env.DB, null)]
+  if (id) {
+    const [d0] = israelDayRange()
+    stmts.push(c.env.DB.prepare(`UPDATE appointments SET status = 'done', updated_at = ?1 WHERE client_id = ?2 AND status = 'scheduled' AND starts_at >= ?3 AND starts_at <= ?1`).bind(nowIso(), id, d0))
+  }
+  await c.env.DB.batch(stmts)
+  return c.json({ client_id: null })
+})
 
 /**
  * מתחיל שעון. אם שעון אחר רץ, הוא נשמר ונסגר באותה פעולה (batch = טרנזקציה).
@@ -101,6 +139,8 @@ clock.post('/stop', async c => {
 export const time = new Hono<AppEnv>()
 
 time.get('/', async c => {
+  // סשנים פרטיים (בלי לקוח), כדי שאפשר יהיה לראות ולמחוק אותם
+  if (c.req.query('private') === '1') return c.json(await all<TimeEntry>(c.env.DB, `SELECT * FROM time_entries WHERE client_id IS NULL AND ended_at IS NOT NULL ORDER BY started_at DESC LIMIT 20`))
   const client = c.req.query('client_id')
   const rows = client
     ? await all<TimeEntry>(c.env.DB, `SELECT * FROM time_entries WHERE client_id = ? ORDER BY started_at DESC LIMIT 200`, client)
@@ -115,7 +155,8 @@ time.post('/', async c => {
   const minutes = int(b, 'minutes', { required: true, min: 1, max: 24 * 60 })!
   const client_id = str(b, 'client_id', { required: true })!
   must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ?`, client_id), 'הלקוח לא נמצא')
-  const project_id = str(b, 'project_id') ?? await defaultProject(c.env.DB, client_id)
+  // project_id: null שנשלח במפורש = "בלי פרויקט". שדה חסר = הפרויקט הפעיל
+  const project_id = 'project_id' in b ? str(b, 'project_id') : await defaultProject(c.env.DB, client_id)
   await checkProject(c.env.DB, project_id, client_id)
   const id = uid()
   await run(c.env.DB,
@@ -129,11 +170,23 @@ time.post('/', async c => {
 time.patch('/:id', async c => {
   const e = must(await first<TimeEntry>(c.env.DB, `SELECT * FROM time_entries WHERE id = ?`, c.req.param('id')))
   const b = await body(c.req.raw)
-  if (!('project_id' in b)) fail(400, 'אין מה לעדכן')
-  if (e.charge_id) fail(409, 'השעות האלה כבר חויבו. כדי להעביר אותן, מחקו קודם את החיוב')
-  const project_id = str(b, 'project_id')
+  const keys = ['project_id', 'kind', 'started_at', 'minutes', 'notes'].filter(k => k in b)
+  if (!keys.length) fail(400, 'אין מה לעדכן')
+  if (e.charge_id) fail(409, 'השעות האלה כבר חויבו. כדי לשנות אותן, מחקו קודם את החיוב')
+  const timing = 'started_at' in b || 'minutes' in b
+  if (timing && !e.ended_at) fail(409, 'אי אפשר לשנות זמנים של שעון שרץ. עצרו אותו קודם')
+  const project_id = 'project_id' in b ? str(b, 'project_id') : e.project_id
   await checkProject(c.env.DB, project_id, e.client_id)
-  await run(c.env.DB, `UPDATE time_entries SET project_id = ? WHERE id = ?`, project_id, e.id)
+  let started = e.started_at, ended = e.ended_at, paused = e.paused_seconds
+  if (timing) {
+    started = iso(b, 'started_at') ?? e.started_at
+    const minutes = int(b, 'minutes', { min: 1, max: 24 * 60 }) ?? Math.round(entrySeconds(e) / 60)
+    ended = new Date(Date.parse(started) + minutes * 60000).toISOString()
+    paused = 0 // המשך שהוזן הוא נטו
+  }
+  await run(c.env.DB, `UPDATE time_entries SET project_id = ?, kind = ?, started_at = ?, ended_at = ?, paused_seconds = ?, notes = ? WHERE id = ?`,
+    project_id, 'kind' in b ? oneOf(b, 'kind', KINDS) : e.kind, started, ended, paused,
+    'notes' in b ? str(b, 'notes', { max: 1000 }) : e.notes, e.id)
   return c.json(await first<TimeEntry>(c.env.DB, `SELECT * FROM time_entries WHERE id = ?`, e.id))
 })
 

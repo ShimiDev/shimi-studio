@@ -154,12 +154,13 @@ export function SettingsPage() {
   const { toast, fail } = useStore()
   const { data, setData } = useData<Settings>('/settings')
   const [rate, setRate] = useState('')
-  useEffect(() => { if (data) setRate(fromAgorot(data.default_rate)) }, [data])
+  const [song, setSong] = useState('')
+  useEffect(() => { if (data) { setRate(fromAgorot(data.default_rate)); setSong(data.default_song_price ? fromAgorot(data.default_song_price) : '') } }, [data])
   const save = async (patch: Partial<Settings>) => {
     try { setData(await api.put<Settings>('/settings', patch)); toast('ההגדרות נשמרו') } catch (e) { fail(e) }
   }
   if (!data) return null
-  const rateLabel = data.billing_mode === 'per_song' ? 'מחיר ברירת מחדל לשיר (₪)' : data.billing_mode === 'fixed' ? 'תעריף לשעה, לחישובים (₪)' : 'תעריף ברירת מחדל לשעה (₪)'
+  // תעריף לשעה ומחיר לשיר הם שני שדות נפרדים, כדי שהחלפת שיטה לא תהפוך 150 ₪ לשעה ל-150 ₪ לשיר
   return (
     <>
       <h1 className="page">הגדרות</h1>
@@ -171,8 +172,11 @@ export function SettingsPage() {
             {(Object.keys(BILLING_MODES) as BillingMode[]).map(k =>
               <button key={k} type="button" aria-pressed={data.billing_mode === k} onClick={() => save({ billing_mode: k })}>{BILLING_MODES[k]}</button>)}
           </div>
-          <form onSubmit={e => { e.preventDefault(); const v = toAgorot(rate); if (v != null) save({ default_rate: v }) }}>
-            <label className="field"><span>{rateLabel}</span><input inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)} /></label>
+          <form onSubmit={e => { e.preventDefault(); const v = toAgorot(rate); const sp = toAgorot(song); if (v == null) { fail(new ApiError('צריך תעריף לשעה', 400)); return } save({ default_rate: v, default_song_price: sp ?? 0 }) }}>
+            <div className="fields2">
+              <label className="field"><span>תעריף ברירת מחדל לשעה (₪)</span><input inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)} /></label>
+              <label className="field"><span>מחיר ברירת מחדל לשיר (₪)</span><input inputMode="decimal" value={song} onChange={e => setSong(e.target.value)} placeholder="לא נקבע" /></label>
+            </div>
             <button className="btn small primary" type="submit">שמירה</button>
           </form>
         </div>

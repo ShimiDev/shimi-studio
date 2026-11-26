@@ -20,7 +20,10 @@ export function QuickNote({ anchor, clientId, entryId, title, onClose }: {
   const input = useRef<HTMLTextAreaElement>(null)
   const [pos, setPos] = useState({ left: 0, top: 0 })
   const [kind, setKind] = useState<Kind>('note')
-  const [text, setText] = useState('')
+  // טיוטה שלא נשמרה לא הולכת לאיבוד כשלוחצים בטעות מחוץ לחלון: היא מחכה בפתיחה הבאה
+  const draftKey = `qn-draft:${scope}`
+  const [text, setTextState] = useState(() => { try { return sessionStorage.getItem(draftKey) ?? '' } catch { return '' } })
+  const setText = (t: string) => { setTextState(t); try { if (t) sessionStorage.setItem(draftKey, t); else sessionStorage.removeItem(draftKey) } catch { /* */ } }
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState<Saved[]>(() => load(scope))
 
@@ -45,7 +48,7 @@ export function QuickNote({ anchor, clientId, entryId, title, onClose }: {
     try {
       const r = await api.post<{ id: string }>('/notes', { kind, text: t, client_id: clientId, time_entry_id: entryId })
       const next = [{ id: r.id, kind, text: t, at: new Date().toISOString() }, ...saved].slice(0, 20)
-      setSaved(next); sessionStorage.setItem(key(scope), JSON.stringify(next))
+      setSaved(next); try { sessionStorage.setItem(key(scope), JSON.stringify(next)) } catch { /* */ }
       setText(''); input.current?.focus()
       S.toast(kind === 'task' ? 'המשימה נשמרה' : 'ההערה נשמרה')
       if (!S.privacy) S.bump()

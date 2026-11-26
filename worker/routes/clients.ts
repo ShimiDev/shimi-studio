@@ -148,11 +148,14 @@ projects.get('/:id', async c => {
     first<{ n: number; seconds: number }>(db,
       `SELECT COUNT(*) AS n, COALESCE(SUM(${SECONDS_SQL}),0) AS seconds FROM time_entries
        WHERE client_id = ? AND project_id IS NULL AND charge_id IS NULL AND ended_at IS NOT NULL`, project.client_id),
-    all<Note>(db, `SELECT n.* FROM notes n JOIN time_entries t ON t.id = n.time_entry_id WHERE t.project_id = ? ORDER BY n.created_at`, project.id),
+    // הערות מהסשנים של הפרויקט, וגם הערות שנכתבו על הלקוח מחוץ לסשן מאז שהפרויקט נפתח
+    all<Note>(db, `SELECT n.* FROM notes n LEFT JOIN time_entries t ON t.id = n.time_entry_id
+      WHERE t.project_id = ?1 OR (n.time_entry_id IS NULL AND n.client_id = ?2 AND n.created_at >= ?3) ORDER BY n.created_at`,
+      project.id, project.client_id, project.created_at),
   ])
   const mode = project.billing_mode ?? settings.billing_mode
   const rate = mode === 'hourly' ? project.unit_price ?? client?.hourly_rate ?? settings.default_rate
-    : mode === 'per_song' ? project.unit_price ?? settings.default_rate
+    : mode === 'per_song' ? project.unit_price ?? settings.default_song_price ?? 0
     : project.quote_amount ?? project.unit_price ?? 0
   const done = sessions.filter(t => t.ended_at)
   const sum = (xs: { seconds: number }[]) => xs.reduce((a, t) => a + Math.max(0, t.seconds), 0)
@@ -196,7 +199,7 @@ projects.patch('/:id', async c => {
   const b = await body(c.req.raw)
   const sets: string[] = []; const vals: unknown[] = []
   const put = (k: string, v: unknown) => { if (k in b) { sets.push(`${k} = ?`); vals.push(v) } }
-  put('title', str(b, 'title', { max: 160 }))
+  put('title', str(b, 'title', { required: 'title' in b, max: 160 }))
   put('billing_mode', b.billing_mode ? oneOf(b, 'billing_mode', BILLING) : null)
   put('unit_price', int(b, 'unit_price', { min: 0 }))
   put('quote_amount', int(b, 'quote_amount', { min: 0 }))

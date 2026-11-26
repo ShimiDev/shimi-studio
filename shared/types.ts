@@ -61,6 +61,7 @@ export interface TimeEntry {
 /** השעון שרץ עכשיו, עם שם הלקוח לנוחות */
 export interface RunningClock extends TimeEntry {
   client_name: string | null
+  project_title: string | null
   color_a: string | null
   color_b: string | null
   is_group: 0 | 1 | null
@@ -158,6 +159,8 @@ export interface Note {
 export interface Settings {
   billing_mode: BillingMode
   default_rate: number
+  /** מחיר ברירת מחדל לשיר, באגורות. 0 = לא נקבע */
+  default_song_price: number
   vat_status: 'exempt' | 'licensed'
   vat_rate: number
   studio_name: string

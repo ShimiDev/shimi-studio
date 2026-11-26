@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useStore, useData } from '../store'
 import { api } from '../api'
 import { money, hours, date } from '../format'
-import { PaymentForm, ExpenseForm } from '../components/Forms'
+import { PaymentForm, ExpenseForm, ChargeEditForm } from '../components/Forms'
 import { israelDate, israelMonthRange } from '../../../shared/time'
 import { PAY_METHODS, EXPENSE_CATEGORIES, workKind, type MonthReport, type Payment, type Expense, type Charge } from '../../../shared/types'
 
@@ -23,7 +23,7 @@ function Bars({ rows }: { rows: { label: string; value: number; text: string }[]
 }
 
 export function MoneyPage() {
-  const { bump, fail, toast } = useStore()
+  const { bump, fail, toast, go } = useStore()
   const [month, setMonth] = useState(() => israelDate().slice(0, 7))
   const [tab, setTab] = useState<'payments' | 'expenses' | 'charges'>('payments')
   const [dialog, setDialog] = useState<'pay' | 'expense' | null>(null)
@@ -32,10 +32,11 @@ export function MoneyPage() {
   const report = useData<MonthReport>(`/reports/month?m=${month}`)
   const pays = useData<Payment[]>(tab === 'payments' ? `/payments?${range}` : null)
   const exps = useData<Expense[]>(tab === 'expenses' ? `/expenses?${range}` : null)
-  const chs = useData<Charge[]>(tab === 'charges' ? '/charges' : null)
+  const chs = useData<Charge[]>(tab === 'charges' ? `/charges?${range}` : null)
+  const [editing, setEditing] = useState<{ payment?: Payment; expense?: Expense; charge?: Charge } | null>(null)
   const r = report.data
-  const del = async (path: string) => {
-    if (!confirm('למחוק?')) return
+  const del = async (path: string, msg = 'למחוק?') => {
+    if (!confirm(msg)) return
     try { await api.del(path); bump(); toast('נמחק') } catch (e) { fail(e) }
   }
 
@@ -73,28 +74,35 @@ export function MoneyPage() {
 
       <div className="panel">
         <div className="seg" style={{ marginBottom: 10 }}>
-          {([['payments', 'תשלומים'], ['expenses', 'הוצאות'], ['charges', 'חיובים (כל הזמן)']] as const).map(([k, l]) =>
+          {([['payments', 'תשלומים'], ['expenses', 'הוצאות'], ['charges', 'חיובים']] as const).map(([k, l]) =>
             <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>)}
         </div>
         <div className="scroll-x">
           {tab === 'payments' && (pays.data?.length ? (
             <table className="list"><thead><tr><th>תאריך</th><th>לקוח</th><th>אמצעי</th><th>סכום</th><th>הערה</th><th /></tr></thead><tbody>
               {pays.data.map(p => <tr key={p.id}><td>{date(p.paid_at)}</td><td>{p.client_name ?? '—'}</td><td>{PAY_METHODS[p.method]}</td><td className="amt">{money(p.amount)}</td><td>{p.notes}</td>
-                <td><button className="btn small ghost" type="button" onClick={() => del(`/payments/${p.id}`)}>מחיקה</button></td></tr>)}
+                <td className="nowrap"><button className="btn small ghost" type="button" onClick={() => setEditing({ payment: p })}>עריכה</button><button className="btn small ghost" type="button" onClick={() => del(`/payments/${p.id}`)}>מחיקה</button></td></tr>)}
             </tbody></table>) : <div className="empty">אין תשלומים בחודש הזה.</div>)}
           {tab === 'expenses' && (exps.data?.length ? (
             <table className="list"><thead><tr><th>תאריך</th><th>קטגוריה</th><th>ספק</th><th>סכום</th><th>מע״מ</th><th /></tr></thead><tbody>
               {exps.data.map(x => <tr key={x.id}><td>{date(x.spent_at)}</td><td>{EXPENSE_CATEGORIES[x.category]}</td><td>{x.vendor}</td><td className="amt">{money(x.amount)}</td><td className="amt">{x.vat_amount ? money(x.vat_amount) : ''}</td>
-                <td><button className="btn small ghost" type="button" onClick={() => del(`/expenses/${x.id}`)}>מחיקה</button></td></tr>)}
+                <td className="nowrap"><button className="btn small ghost" type="button" onClick={() => setEditing({ expense: x })}>עריכה</button><button className="btn small ghost" type="button" onClick={() => del(`/expenses/${x.id}`)}>מחיקה</button></td></tr>)}
             </tbody></table>) : <div className="empty">אין הוצאות בחודש הזה.</div>)}
           {tab === 'charges' && (chs.data?.length ? (
-            <table className="list"><thead><tr><th>תאריך</th><th>לקוח</th><th>תיאור</th><th>סכום</th></tr></thead><tbody>
-              {chs.data.map(x => <tr key={x.id}><td>{date(x.charged_at)}</td><td>{x.client_name}</td><td>{x.description}</td><td className="amt">{money(x.amount)}</td></tr>)}
-            </tbody></table>) : <div className="empty">עוד אין חיובים. מחייבים לקוח מתוך חדר הבקרה.</div>)}
+            <table className="list"><thead><tr><th>תאריך</th><th>לקוח</th><th>תיאור</th><th>סכום</th><th /></tr></thead><tbody>
+              {chs.data.map(x => <tr key={x.id}><td>{date(x.charged_at)}</td>
+                <td><button className="linkish" type="button" onClick={() => go({ page: 'client', clientId: x.client_id })}>{x.client_name}</button></td>
+                <td>{x.description}</td><td className="amt">{money(x.amount)}</td>
+                <td className="nowrap"><button className="btn small ghost" type="button" onClick={() => setEditing({ charge: x })}>עריכה</button>
+                  <button className="btn small ghost" type="button" onClick={() => del(`/charges/${x.id}`, 'למחוק את החיוב? שעות שחויבו בו יחזרו להיות פתוחות.')}>מחיקה</button></td></tr>)}
+            </tbody></table>) : <div className="empty">אין חיובים בחודש הזה. מחייבים לקוח מכרטיס הלקוח או מסיכום הפרויקט.</div>)}
         </div>
       </div>
       {dialog === 'pay' && <PaymentForm onClose={() => setDialog(null)} />}
       {dialog === 'expense' && <ExpenseForm onClose={() => setDialog(null)} />}
+      {editing?.payment && <PaymentForm payment={editing.payment} onClose={() => setEditing(null)} />}
+      {editing?.expense && <ExpenseForm expense={editing.expense} onClose={() => setEditing(null)} />}
+      {editing?.charge && <ChargeEditForm charge={editing.charge} onClose={() => setEditing(null)} />}
     </>
   )
 }

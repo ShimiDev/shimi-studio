@@ -483,3 +483,13 @@ button.cp-row:hover { background: var(--panel2) }
 .print-only { display: none }
 .pj-table th, .pj-table td, .pj-table .amt { text-align: start }
 .pj-table td.num, .pj-table .amt { direction: ltr; unicode-bidi: isolate; text-align: right }
+/* בחירת פרויקט לסשן בכרטיס הלקוח */
+.cp-proj-pick { max-width: 11rem; min-height: 36px; background: var(--bg); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 4px 8px; color: var(--fg); font-size: 13px }
+@media (max-width: 640px) { .cp-proj-pick { max-width: 8rem } }
+.toast-act { margin-inline-start: 10px; min-height: 32px; color: var(--gold) }
+.desk-proj { display: block; margin-top: 6px }
+/* בטלפון: חמש הלשוניות נכנסות בשורה אחת, בלי גלילה הצידה */
+@media (max-width: 520px) {
+  .tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; overflow: visible }
+  .tab { padding: 8px 2px; font-size: 13px; white-space: normal; line-height: 1.2; min-height: 44px }
+}

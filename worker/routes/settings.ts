@@ -5,7 +5,7 @@ import { body, oneOf, int, num, str, bool } from '../lib/validate'
 import type { Settings } from '../../shared/types'
 
 const DEFAULTS: Settings = {
-  billing_mode: 'hourly', default_rate: 15000, vat_status: 'exempt', vat_rate: 0.18,
+  billing_mode: 'hourly', default_rate: 15000, default_song_price: 0, vat_status: 'exempt', vat_rate: 0.18,
   studio_name: 'האולפן של שימי', studio_address: '', studio_phone: '', email_signature: '',
   reminders_enabled: false, reminder_hours: 24,
 }
@@ -26,6 +26,7 @@ settings.put('/', async c => {
   const updates: [string, unknown][] = []
   if ('billing_mode' in b) updates.push(['billing_mode', oneOf(b, 'billing_mode', ['hourly', 'per_song', 'fixed'] as const)])
   if ('default_rate' in b) updates.push(['default_rate', int(b, 'default_rate', { required: true, min: 0, max: 10_000_000 })])
+  if ('default_song_price' in b) updates.push(['default_song_price', int(b, 'default_song_price', { required: true, min: 0, max: 100_000_000 })])
   if ('vat_status' in b) updates.push(['vat_status', oneOf(b, 'vat_status', ['exempt', 'licensed'] as const)])
   if ('vat_rate' in b) {
     const r = num(b, 'vat_rate')

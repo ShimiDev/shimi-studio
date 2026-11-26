@@ -6,7 +6,7 @@ import { avatar } from '../three/overlay'
 import { money, hours, time, date, when, spoken } from '../format'
 import { WorkMenu, ActionMenu } from '../components/WorkMenu'
 import { QuickNote } from '../components/QuickNote'
-import { PaymentForm, ChargeForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
+import { PaymentForm, ChargeForm, ChargeEditForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
 import { entrySeconds } from '../../../shared/time'
 import {
   CLIENT_KINDS, PAY_METHODS, BILLING_MODES, workKind,
@@ -49,10 +49,15 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
   const [moreEl, setMoreEl] = useState<HTMLElement | null>(null)
   const [noteEl, setNoteEl] = useState<HTMLElement | null>(null)
+  const [editing, setEditing] = useState<{ charge?: Charge; payment?: Payment; entry?: TimeEntry } | null>(null)
 
   const del = async (path: string, msg: string) => {
     if (!confirm(msg)) return
     try { await api.del(path); S.bump(); S.toast('נמחק') } catch (e) { S.fail(e) }
+  }
+  // סשן שנכנס לפרויקט הלא נכון (למשל כשיש ללקוח שני פרויקטים פעילים) עובר מכאן
+  const moveSession = async (t: TimeEntry, projectId: string | null) => {
+    try { await api.patch(`/time/${t.id}`, { project_id: projectId }); S.bump(); S.toast(projectId ? 'הסשן הועבר לפרויקט' : 'הסשן הוצא מהפרויקט') } catch (e) { S.fail(e) }
   }
   const toggleTask = async (t: Reminder) => {
     try { await api.patch(`/reminders/${t.id}`, { done: !t.done_at }); S.bump() } catch (e) { S.fail(e) }
@@ -62,8 +67,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const ledger = useMemo(() => {
     if (!d) return []
     const rows = [
-      ...d.charges.map(x => ({ id: x.id, at: x.charged_at, what: x.description, debit: x.amount, credit: 0, path: `/charges/${x.id}`, msg: 'למחוק את החיוב? שעות שחויבו בו יחזרו להיות פתוחות.' })),
-      ...d.payments.map(x => ({ id: x.id, at: x.paid_at, what: `תשלום · ${PAY_METHODS[x.method]}${x.notes ? ` · ${x.notes}` : ''}`, debit: 0, credit: x.amount, path: `/payments/${x.id}`, msg: 'למחוק את התשלום?' })),
+      ...d.charges.map(x => ({ id: x.id, at: x.charged_at, what: x.description, debit: x.amount, credit: 0, path: `/charges/${x.id}`, msg: 'למחוק את החיוב? שעות שחויבו בו יחזרו להיות פתוחות.', edit: () => setEditing({ charge: x }) })),
+      ...d.payments.map(x => ({ id: x.id, at: x.paid_at, what: `תשלום · ${PAY_METHODS[x.method]}${x.notes ? ` · ${x.notes}` : ''}`, debit: 0, credit: x.amount, path: `/payments/${x.id}`, msg: 'למחוק את התשלום?', edit: () => setEditing({ payment: x }) })),
     ].sort((a, b) => a.at.localeCompare(b.at))
     let bal = 0
     return rows.map(r => ({ ...r, bal: (bal += r.debit - r.credit) })).reverse()
@@ -193,9 +198,16 @@ export function ClientPage({ clientId }: { clientId: string }) {
           {d.time.map(t => <div key={t.id} className="cp-row">
             <span className="nowrap">{date(t.started_at)}</span>
             <span className="grow"><span className="kind-dot" style={{ background: workKind(t.kind).color }} />{workKind(t.kind).label}{t.is_client_present ? ' · REC' : ''}</span>
-            <span className="num">{t.ended_at ? spoken(entrySeconds(t)) : 'רץ עכשיו'}</span>
+            <span className="nowrap">{t.ended_at ? spoken(entrySeconds(t)) : 'רץ עכשיו'}</span>
+            {d.projects.length > 0 && (t.charge_id
+              ? <span className="mute nowrap">{d.projects.find(p => p.id === t.project_id)?.title ?? 'בלי פרויקט'}</span>
+              : <select className="cp-proj-pick" aria-label="פרויקט של הסשן" value={t.project_id ?? ''} onChange={e => moveSession(t, e.target.value || null)}>
+                  <option value="">בלי פרויקט</option>
+                  {d.projects.filter(p => p.status === 'active' || p.id === t.project_id).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>)}
             {t.charge_id ? <span className="pill ok">חויב</span> : t.ended_at
-              ? <button className="btn small ghost" type="button" aria-label="מחיקת הרישום" onClick={() => del(`/time/${t.id}`, 'למחוק את הרישום?')}>מחיקה</button>
+              ? <><button className="btn small ghost" type="button" onClick={() => setEditing({ entry: t })}>עריכה</button>
+                <button className="btn small ghost" type="button" aria-label="מחיקת הרישום" onClick={() => del(`/time/${t.id}`, 'למחוק את הרישום?')}>מחיקה</button></>
               : null}
           </div>)}
         </div> : <div className="empty">עוד לא נרשמו סשנים.</div>)}
@@ -205,6 +217,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
             <span className="nowrap mute">{date(r.at)}</span>
             <span className="grow">{r.what}</span>
             <b className={`num ${r.credit ? 'pos' : ''}`}>{r.credit ? '−' : ''}{money(r.debit || r.credit)}</b>
+            <button className="btn small ghost" type="button" onClick={r.edit}>עריכה</button>
             <button className="btn small ghost" type="button" onClick={() => del(r.path, r.msg)}>מחיקה</button>
           </div>)}
         </div> : <div className="empty">עוד אין חיובים או תשלומים.</div>)}
@@ -221,6 +234,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
       {dialog === 'project' && <ProjectForm clientId={c.id} onClose={() => setDialog(null)} />}
       {dialog === 'reminder' && <ReminderForm clientId={c.id} onClose={() => setDialog(null)} />}
       {appt && <AppointmentForm appt={{ ...appt, client_name: c.name, client_email: c.email }} onClose={() => setAppt(null)} />}
+      {editing?.charge && <ChargeEditForm charge={editing.charge} onClose={() => setEditing(null)} />}
+      {editing?.payment && <PaymentForm payment={editing.payment} onClose={() => setEditing(null)} />}
+      {editing?.entry && <ManualTimeForm clientId={c.id} entry={editing.entry} onClose={() => setEditing(null)} />}
       {project && <ProjectForm clientId={c.id} project={project} onClose={() => setProject(null)} />}
     </div>
   )
