@@ -109,3 +109,52 @@ export function walkOut(avaEl: HTMLElement, c: AvaClient, onDone: () => void) {
   }
   requestAnimationFrame(f)
 }
+
+/**
+ * ההפך מ-walkOut: בסוף סשן הדמות יוצאת מהדלת, הולכת חזרה לכרטיס שלה ונכנסת אליו.
+ */
+export function walkBack(avaEl: HTMLElement, c: AvaClient, onDone: () => void) {
+  const o = overlay()
+  const door = document.getElementById('door'), flash = document.getElementById('flash')
+  if (!o || REDUCED || !door) { onDone(); return }
+  if (flash) flash.style.opacity = '0'
+  const W = window.innerWidth, H = window.innerHeight
+  const cr = avaEl.getBoundingClientRect()
+  o.canvas.style.display = 'block'
+  o.r.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); o.r.setSize(W, H, false)
+  const cam = new THREE.OrthographicCamera(0, W, H, 0, -1000, 1000); cam.position.z = 500
+  const scale = Math.max(60, Math.min(90, W / 14)) * (c.is_group ? .8 : 1)
+  const ch = new THREE.Group(); o.scene.add(ch)
+  const cols = memberColors(c)
+  const mates: Char[] = cols.map((cc, i) => {
+    const m = makeChar(cc[0], cc[1]); m.position.x = (i - (cols.length - 1) / 2) * .55; m.position.z = i === 1 ? .2 : 0; ch.add(m); return m
+  })
+  const sx = cr.left + cr.width / 2, sy = H - (cr.top + cr.height * .95)
+  const dx = Math.max(70, W * .08)
+  const dy = Math.min(H - 60, Math.max(140, H * .35))
+  door.style.left = (dx - 42) + 'px'; door.style.top = (H - dy - 122) + 'px'; door.classList.add('on')
+  const t0 = performance.now(), OUT = 450, WALK = Math.max(1400, Math.min(2400, Math.hypot(sx - dx, sy - dy) * 2.2)), DROP = 550, total = OUT + WALK + DROP
+  const dir = sx > dx ? 1 : -1
+  const f = (now: number) => {
+    const el = Math.max(0, now - t0), t = now / 1000
+    if (el < OUT) {
+      const k = el / OUT
+      ch.position.set(dx + (1 - k) * 10, dy + (1 - k) * 8, 50); ch.scale.setScalar(scale * (.5 + .5 * k)); ch.rotation.y = dir * 1.15
+      mates.forEach((m, i) => walkPose(m, t * 11 + i * 1.3, k))
+    } else if (el < OUT + WALK) {
+      const k = (el - OUT) / WALK, e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2
+      ch.position.set(dx + (sx - dx) * e, dy + (sy - dy) * e, 50); ch.scale.setScalar(scale); ch.rotation.y = dir * 1.15
+      mates.forEach((m, i) => walkPose(m, t * 11 + i * 1.3, 1))
+      if (k > .3) door.classList.remove('on')
+    } else {
+      const k = Math.min(1, (el - OUT - WALK) / DROP), e = k * k
+      ch.position.set(sx, sy + Math.sin(k * Math.PI) * scale * .6, 50); ch.scale.setScalar(scale * (1 - .65 * e)); ch.rotation.y = dir * 1.15 * (1 - k)
+      mates.forEach((m, i) => idlePose(m, t + i, false))
+    }
+    o.r.render(o.scene, cam)
+    if (el < total) { requestAnimationFrame(f); return }
+    o.scene.remove(ch); o.r.clear(); o.canvas.style.display = 'none'; door.classList.remove('on')
+    onDone()
+  }
+  requestAnimationFrame(f)
+}

@@ -1,7 +1,7 @@
 // מסך הלקוחות: רשת כרטיסים. לחיצה על כרטיס פותחת את כרטיס הלקוח, ו"לחדר" מוציא את הדמות לחדר ההקלטה.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore, useData } from '../store'
-import { avatar, walkOut } from '../three/overlay'
+import { avatar, walkOut, walkBack } from '../three/overlay'
 import { money, hours, when } from '../format'
 import { ClientForm } from '../components/Forms'
 import { WorkMenu } from '../components/WorkMenu'
@@ -11,7 +11,7 @@ type Filter = 'all' | 'today' | 'due' | 'new' | 'archived'
 const NEW_DAYS = 21
 
 export function ClientsPage() {
-  const { go, clock, startClock, stopClock, inRoom } = useStore()
+  const { go, clock, startClock, stopClock, inRoom, returning, doneReturning } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
@@ -27,6 +27,19 @@ export function ClientsPage() {
     if (filter === 'new') return isNew(c)
     return true
   }), [data, q, filter])
+
+  // סוף סשן: הדמות חוזרת מהדלת אל הכרטיס שלה
+  const [back, setBack] = useState<string | null>(null)
+  useEffect(() => {
+    if (!returning || !data) return
+    const c = data.find(x => x.id === returning)
+    const card = document.querySelector<HTMLElement>(`[data-client="${returning}"]`)
+    doneReturning()
+    if (!c || !card) return
+    setBack(c.id)
+    card.scrollIntoView({ block: 'nearest' })
+    requestAnimationFrame(() => walkBack(card.querySelector<HTMLElement>('.ava')!, c, () => setBack(null)))
+  }, [returning, data, doneReturning])
 
   const enter = (c: ClientSummary, card: HTMLElement) => {
     if (leaving) return
@@ -54,7 +67,7 @@ export function ClientsPage() {
           const wk = working ? workKind(clock!.kind) : null
           const img = avatar(c)
           return (
-            <div key={c.id} className={`card${working ? ' working' : ''}`} style={wk ? { ['--wc' as string]: wk.color } : undefined}
+            <div key={c.id} data-client={c.id} className={`card${working ? ' working' : ''}${back === c.id ? ' lifted' : ''}`} style={wk ? { ['--wc' as string]: wk.color } : undefined}
               role="button" tabIndex={0} aria-label={`כרטיס הלקוח של ${c.name}`}
               onClick={e => !(e.target as HTMLElement).closest('.quick, .go') && go({ page: 'client', clientId: c.id })}
               onKeyDown={e => e.key === 'Enter' && e.target === e.currentTarget && go({ page: 'client', clientId: c.id })}>

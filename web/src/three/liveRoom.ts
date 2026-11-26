@@ -8,11 +8,13 @@ export interface LiveRoom {
   setClient(c: RoomClient | null): void
   setWork(on: boolean, c?: RoomClient | null): void
   setRec(on: boolean): void
+  /** סיום סשן: כל הדמויות יוצאות מהדלת, ואז onDone */
+  leave(onDone: () => void): void
   dispose(): void
 }
 
 interface Spot { p: THREE.Vector3; f?: number; sit?: boolean }
-interface Member { ch: Char; i: number; spot: Spot; seated?: boolean; walk: null | { t0: number; dur: number; from: THREE.Vector3; mid: THREE.Vector3; to: THREE.Vector3 } }
+interface Member { ch: Char; i: number; spot: Spot; seated?: boolean; leaving?: boolean; walk: null | { t0: number; dur: number; from: THREE.Vector3; mid: THREE.Vector3; to: THREE.Vector3 } }
 
 export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
   const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true })
@@ -220,6 +222,16 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
       crew.push({ ch, i, spot: sp[i], walk: { t0: performance.now() + i * 550, dur: REDUCED ? 1 : 2800, from: DOOR.clone(), mid: new THREE.Vector3(1.6, 0, -.2 + i * .15), to: sp[i].p.clone() } })
     })
   }
+  let leaveDone: (() => void) | null = null
+  function leave(onDone: () => void) {
+    if (!crew.length) { onDone(); return }
+    leaveDone = onDone
+    crew.forEach((m, i) => {
+      if (m.seated) { m.ch.position.y = 0; const u = m.ch.userData; u.legs[0].rotation.x = u.legs[1].rotation.x = 0 }
+      const from = m.ch.position.clone(); from.y = 0; m.seated = false; m.leaving = true
+      m.walk = { t0: performance.now() + i * 350, dur: REDUCED ? 1 : 2200, from, mid: new THREE.Vector3(1.6, 0, -.2 + i * .15), to: DOOR.clone() }
+    })
+  }
   function setWork(on: boolean, c?: RoomClient | null) {
     if (workOn === on && !c) return
     workOn = on
@@ -255,7 +267,13 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
         const dx = tmp.x - ch.position.x, dz = tmp.z - ch.position.z
         if (Math.abs(dx) + Math.abs(dz) > 1e-4) ch.rotation.y = Math.atan2(dx, dz)
         ch.position.copy(tmp); u.head.rotation.x = 0; walkPose(ch, ti * 9, 1)
-        if (k >= 1) { m.walk = null; m.seated = !!m.spot.sit }
+        if (k >= 1) {
+          m.walk = null; m.seated = !m.leaving && !!m.spot.sit
+          if (m.leaving) {
+            scene.remove(ch); crew = crew.filter(x => x !== m)
+            if (!crew.length) { cur = null; const f = leaveDone; leaveDone = null; f?.() }
+          }
+        }
       } else if (m.seated) {
         ch.position.set(STOOL.x, .42, STOOL.z - .25); ch.rotation.y += (.35 - ch.rotation.y) * .1
         u.legs[0].rotation.x = u.legs[1].rotation.x = -1.45; u.arms[0].rotation.x = -.5; u.arms[1].rotation.x = -.5; u.torso.position.y = 0
@@ -272,7 +290,7 @@ export function createLiveRoom(cv: HTMLCanvasElement): LiveRoom {
   raf = requestAnimationFrame(loop)
 
   return {
-    setClient, setWork,
+    setClient, setWork, leave,
     setRec(on) { recOn = on },
     dispose() {
       alive = false; cancelAnimationFrame(raf); ro.disconnect()

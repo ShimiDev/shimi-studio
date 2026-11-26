@@ -64,6 +64,16 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   useEffect(() => { room.current?.setWork(working, roomClient) }, [working, roomKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { room.current?.setRec(isRec) }, [isRec])
 
+  // סיום סשן: הדמויות יוצאות מהדלת, ואז חוזרים לרשת הלקוחות
+  const [leaving, setLeaving] = useState(false)
+  const endSession = () => {
+    if (!clientId || leaving) return
+    if (isRec && !confirm('ההקלטה עדיין רצה. לעצור אותה ולסיים את הסשן?')) return
+    setLeaving(true)
+    const finish = () => { S.endSession(clientId).finally(() => setLeaving(false)) }
+    if (room.current) room.current.leave(finish); else finish()
+  }
+
   // ---------- פעולות ----------
   const rec = () => isRec ? S.stopClock() : S.startClock('recording', clientId ?? null, { present: !!clientId })
   const workBtn = (el: HTMLElement) => {
@@ -132,6 +142,10 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
             <button className="recbtn" type="button" onClick={rec} aria-label={isRec ? 'עצירת הקלטה' : clientId ? `התחלת הקלטה עם ${name ?? 'הלקוח'}` : 'התחלת סשן פרטי'}>{isRec ? '■' : 'REC'}</button>
             {isRec && !isSolo && (
               <button className="reveal" type="button" onClick={() => S.setRevealed(!revealed)}>{revealed ? 'הסתר נתונים' : 'הצג נתונים'}</button>
+            )}
+            {clientId && (
+              <button className="btn small endsess" type="button" disabled={leaving} onClick={endSession}
+                title="עוצר את השעון אם רץ, והלקוח יוצא מהחדר וחוזר לכרטיס שלו">{leaving ? 'יוצאים…' : 'סיום סשן'}</button>
             )}
           </div>
         </div>

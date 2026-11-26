@@ -19,6 +19,11 @@ interface Store {
   route: Route
   /** מי בחדר עכשיו: הלקוח שהשעון רץ עליו, ואם אין, האחרון שנכנס לחדר הבקרה */
   inRoom: string | null
+  /** סיום סשן: עוצר שעון שרץ על הלקוח, מוציא אותו מהחדר ומחזיר לרשת הלקוחות */
+  endSession(clientId: string): Promise<void>
+  /** לקוח שבדרך חזרה לכרטיס שלו (לאנימציה במסך הלקוחות) */
+  returning: string | null
+  doneReturning(): void
   go(r: Route): void
   toast(msg: string, err?: boolean): void
   clock: RunningClock | null
@@ -128,17 +133,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const seconds = clock ? entrySeconds(clock, now) : 0
   const [lastRoom, setLastRoom] = useState<string | null>(() => { try { return sessionStorage.getItem('in-room') } catch { return null } })
+  const ended = useRef<string | null>(null)
   useEffect(() => {
-    if (route.page === 'control' && route.clientId && route.clientId !== lastRoom) {
+    if (route.page !== 'control') { ended.current = null; return }
+    if (route.clientId && route.clientId !== lastRoom && route.clientId !== ended.current) {
       setLastRoom(route.clientId); try { sessionStorage.setItem('in-room', route.clientId) } catch { /* */ }
     }
   }, [route, lastRoom])
   const inRoom = clock?.client_id ?? lastRoom
+  const [returning, setReturning] = useState<string | null>(null)
+  const endSession = useCallback(async (clientId: string) => {
+    if (clock && clock.client_id === clientId) await stopClock()
+    ended.current = clientId
+    setLastRoom(null); try { sessionStorage.removeItem('in-room') } catch { /* */ }
+    setReturning(clientId)
+    go({ page: 'clients' })
+  }, [clock, stopClock, go])
+  const doneReturning = useCallback(() => setReturning(null), [])
 
   const value = useMemo<Store>(() => ({
-    inRoom, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock,
+    inRoom, endSession, returning, doneReturning, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock,
     privacy, isRec, isSolo, revealed, setRevealed, version, bump, fail,
-  }), [inRoom, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock, privacy, isRec, isSolo, revealed, setRevealed, version, bump, fail])
+  }), [inRoom, endSession, returning, doneReturning, route, go, toast, clock, seconds, startClock, pauseClock, resumeClock, stopClock, privacy, isRec, isSolo, revealed, setRevealed, version, bump, fail])
 
   return (
     <Ctx.Provider value={value}>
