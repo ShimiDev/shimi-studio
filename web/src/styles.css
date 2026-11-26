@@ -391,3 +391,45 @@ a.btn { color: inherit; text-decoration: none }
 .card .ava.empty, .ava-empty { outline: 1.5px dashed color-mix(in srgb, var(--gold) 55%, transparent); outline-offset: -1.5px; place-items: center; display: grid }
 .ava-out { font-size: 12px; color: var(--gold-hi); font-weight: 600; letter-spacing: .02em }
 .desk .endsess { margin-inline-start: 4px; border-color: rgba(201,164,106,.45); color: var(--gold-hi); white-space: nowrap }
+
+/* כרטיס לקוח פשוט */
+.icon-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: 12px; border: 1px solid var(--line2); background: transparent; color: var(--fg); cursor: pointer; flex: none; transition: background .15s }
+.icon-btn:hover { background: var(--panel2) }
+.icon-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+.icon-btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round }
+.icon-btn svg circle { fill: currentColor; stroke: none }
+.cp-contact { display: flex; gap: 8px; align-items: center; margin-top: 12px }
+.cp-contact .num { font-size: 13px; margin-inline-start: 4px }
+.cp-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0 }
+.cp-sum > div { padding: 14px 18px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0 }
+.cp-sum > div + div { border-inline-start: 1px solid var(--line) }
+.cp-sum span { color: var(--mute); font-size: 13px }
+.cp-sum b { font-size: 22px; font-family: var(--f-mono) }
+.cp-sum b.txt { font-family: var(--f-ui); font-size: 17px; font-weight: 600 }
+.cp-sum small { color: var(--mute2); font-size: 12.5px }
+.cp-sum .due b { color: var(--amber) }
+.cp-sum .ok b { color: var(--ok) }
+.cp-sum .btn { margin-top: 6px }
+.cp-notes { white-space: pre-wrap; margin: 0; line-height: 1.6 }
+.cp-hist-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px }
+.cp-hist-head h4 { margin: 0 }
+.cp-hist .seg button small { color: var(--mute2); font-size: 11px }
+.cp-hist .seg button[aria-pressed="true"] small { color: #555 }
+.cp-rows { display: grid; max-height: 420px; overflow-y: auto }
+.cp-row { display: flex; gap: 12px; align-items: center; min-height: 44px; padding: 4px 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg); font-size: 14px; text-align: start; width: 100%; border-radius: 0 }
+.cp-row:last-child { border-bottom: 0 }
+button.cp-row { cursor: pointer }
+button.cp-row:hover { background: var(--panel2) }
+.cp-row.dim { color: var(--mute) }
+.cp-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.cp-row .pos { color: var(--ok) }
+.btn.rec-on { border-color: var(--amber); color: var(--amber) }
+@media (max-width: 720px) {
+  .cp-sum { grid-template-columns: 1fr }
+  .cp-sum > div + div { border-inline-start: 0; border-top: 1px solid var(--line) }
+}
+@media (max-width: 720px) {
+  .cp-actions { display: grid; grid-template-columns: 1fr 1fr auto; width: 100%; max-width: none }
+  .cp-actions .btn { justify-content: center; text-align: center }
+  .cp-actions .btn.primary { grid-column: 1 / -1 }
+}
