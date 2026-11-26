@@ -56,7 +56,7 @@ clients.get('/:id', async c => {
   const id = c.req.param('id')
   const [d0, d1] = israelDayRange()
   const client = must(await first<ClientSummary>(c.env.DB, `${SUMMARY_SQL} WHERE c.id = ?4`, nowIso(), d0, d1, id), 'הלקוח לא נמצא')
-  const [projects, time, charges, payments, appts] = await Promise.all([
+  const [projects, time, charges, payments, appts, allAppts, totals] = await Promise.all([
     all<Project & { seconds: number; charged: number }>(c.env.DB,
       `SELECT p.*,
          (SELECT COALESCE(SUM(${SECONDS_SQL}),0) FROM time_entries WHERE project_id = p.id AND ended_at IS NOT NULL) AS seconds,
@@ -66,8 +66,13 @@ clients.get('/:id', async c => {
     all<Charge>(c.env.DB, `SELECT * FROM charges WHERE client_id = ? ORDER BY charged_at DESC LIMIT 100`, id),
     all<Payment>(c.env.DB, `SELECT * FROM payments WHERE client_id = ? ORDER BY paid_at DESC LIMIT 100`, id),
     all<Appointment>(c.env.DB, `SELECT * FROM appointments WHERE client_id = ? AND starts_at >= ? AND status = 'scheduled' ORDER BY starts_at LIMIT 10`, id, d0),
+    all<Appointment>(c.env.DB, `SELECT * FROM appointments WHERE client_id = ? ORDER BY starts_at DESC LIMIT 200`, id),
+    first<{ charged: number; paid: number; sessions: number }>(c.env.DB,
+      `SELECT (SELECT COALESCE(SUM(amount),0) FROM charges WHERE client_id = ?1) AS charged,
+              (SELECT COALESCE(SUM(amount),0) FROM payments WHERE client_id = ?1) AS paid,
+              (SELECT COUNT(*) FROM time_entries WHERE client_id = ?1) AS sessions`, id),
   ])
-  return c.json({ client, projects, time, charges, payments, appointments: appts })
+  return c.json({ client, projects, time, charges, payments, appointments: appts, all_appointments: allAppts, totals })
 })
 
 function clientFields(b: Record<string, unknown>, partial: boolean) {

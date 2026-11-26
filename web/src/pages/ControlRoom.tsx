@@ -9,13 +9,11 @@ import { api } from '../api'
 import { createLiveRoom, type LiveRoom } from '../three/liveRoom'
 import { hasWebGL } from '../three/character'
 import { avatar } from '../three/overlay'
-import { money, hours, clock as fmtClock, time, when, date, dayLong, spoken } from '../format'
+import { money, hours, clock as fmtClock, time, when, date, dayLong } from '../format'
 import { WorkMenu } from '../components/WorkMenu'
-import { Modal } from '../components/Modal'
 import { PaymentForm, ChargeForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
-import { entrySeconds } from '../../../shared/time'
 import {
-  CLIENT_KINDS, PAY_METHODS, BILLING_MODES, workKind,
+  CLIENT_KINDS, workKind,
   type ClientSummary, type Dashboard, type Project, type TimeEntry, type Charge, type Payment, type Appointment, type Client,
 } from '../../../shared/types'
 
@@ -86,7 +84,7 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
       <div className="croom">
         <div className="col">
           {hidden ? <div className="hidden-panel" /> : c ? (
-            <ClientPanel d={detail.data!} onAction={setDialog} />
+            <ClientPanel d={detail.data!} onAction={a => a === 'sheet' ? S.go({ page: 'client', clientId: clientId! }) : setDialog(a)} />
           ) : (
             <div className="panel">
               <h4>בחדר עכשיו</h4>
@@ -166,7 +164,6 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
       {dialog === 'edit' && c && <ClientForm client={c as Client} onClose={() => setDialog(null)} />}
       {dialog === 'project' && clientId && <ProjectForm clientId={clientId} onClose={() => setDialog(null)} />}
       {dialog === 'reminder' && <ReminderForm clientId={clientId} onClose={() => setDialog(null)} />}
-      {dialog === 'sheet' && detail.data && <ClientSheet d={detail.data} onClose={() => setDialog(null)} />}
     </>
   )
 }
@@ -206,7 +203,7 @@ function ClientPanel({ d, onAction }: { d: Detail; onAction(a: Dialog): void }) 
         <button className="btn small" type="button" onClick={() => onAction('appt')}>קביעת תור</button>
         <button className="btn small" type="button" onClick={() => onAction('time')}>הוספת שעות</button>
         <button className="btn small" type="button" onClick={() => onAction('project')}>פרויקט חדש</button>
-        <button className="btn small" type="button" onClick={() => onAction('sheet')}>כרטיס מלא</button>
+        <button className="btn small" type="button" onClick={() => onAction('sheet')}>כרטיס לקוח מלא</button>
       </div>
     </div>
   )
@@ -223,59 +220,4 @@ function Reminders({ items }: { items: Dashboard['reminders'] }) {
       <span />
     </label>
   ))}</>
-}
-
-/** כרטיס לקוח מלא: היסטוריית שעות, חיובים, תשלומים ופרויקטים */
-function ClientSheet({ d, onClose }: { d: Detail; onClose(): void }) {
-  const { bump, fail, toast } = useStore()
-  const [tab, setTab] = useState<'time' | 'charges' | 'payments' | 'projects'>('time')
-  const [editProject, setEditProject] = useState<Project | null>(null)
-  const del = async (path: string, msg: string) => {
-    if (!confirm(msg)) return
-    try { await api.del(path); bump(); toast('נמחק') } catch (e) { fail(e) }
-  }
-  return (
-    <Modal title={d.client.name} onClose={onClose} wide>
-      <div className="row" style={{ marginBottom: 12 }}>
-        {d.client.phone && <a className="btn small" href={`tel:${d.client.phone}`} dir="ltr">{d.client.phone}</a>}
-        {d.client.email && <a className="btn small" href={`mailto:${d.client.email}`} dir="ltr">{d.client.email}</a>}
-        <span className="pill gold">יתרה {money(d.client.balance)}</span>
-      </div>
-      {d.client.notes && <p className="mute" style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{d.client.notes}</p>}
-      <div className="seg" style={{ marginBottom: 12 }}>
-        {([['time', 'שעות'], ['charges', 'חיובים'], ['payments', 'תשלומים'], ['projects', 'פרויקטים']] as const).map(([k, l]) =>
-          <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>)}
-      </div>
-      <div className="scroll-x">
-        {tab === 'time' && (d.time.length ? (
-          <table className="list"><thead><tr><th>תאריך</th><th>סוג</th><th>משך</th><th>סטטוס</th><th /></tr></thead><tbody>
-            {d.time.map(t => <tr key={t.id}>
-              <td>{date(t.started_at)} {time(t.started_at)}</td>
-              <td>{workKind(t.kind).label}{t.is_client_present ? ' (REC)' : ''}{t.source === 'manual' ? ' · ידני' : ''}</td>
-              <td>{t.ended_at ? spoken(entrySeconds(t)) : 'רץ עכשיו'}</td>
-              <td>{t.charge_id ? <span className="pill ok">חויב</span> : <span className="pill">לא חויב</span>}</td>
-              <td>{t.ended_at && !t.charge_id && <button className="btn small ghost" type="button" onClick={() => del(`/time/${t.id}`, 'למחוק את הרישום?')}>מחיקה</button>}</td>
-            </tr>)}
-          </tbody></table>) : <div className="empty">עוד לא נרשמו שעות.</div>)}
-        {tab === 'charges' && (d.charges.length ? (
-          <table className="list"><thead><tr><th>תאריך</th><th>תיאור</th><th>סכום</th><th /></tr></thead><tbody>
-            {d.charges.map(x => <tr key={x.id}><td>{date(x.charged_at)}</td><td>{x.description}</td><td className="amt">{money(x.amount)}</td>
-              <td><button className="btn small ghost" type="button" onClick={() => del(`/charges/${x.id}`, 'למחוק את החיוב? השעות שבו יחזרו להיות פתוחות לחיוב.')}>מחיקה</button></td></tr>)}
-          </tbody></table>) : <div className="empty">אין חיובים.</div>)}
-        {tab === 'payments' && (d.payments.length ? (
-          <table className="list"><thead><tr><th>תאריך</th><th>אמצעי</th><th>סכום</th><th>הערה</th><th /></tr></thead><tbody>
-            {d.payments.map(x => <tr key={x.id}><td>{date(x.paid_at)}</td><td>{PAY_METHODS[x.method]}</td><td className="amt">{money(x.amount)}</td><td>{x.notes}</td>
-              <td><button className="btn small ghost" type="button" onClick={() => del(`/payments/${x.id}`, 'למחוק את התשלום?')}>מחיקה</button></td></tr>)}
-          </tbody></table>) : <div className="empty">אין תשלומים.</div>)}
-        {tab === 'projects' && (d.projects.length ? (
-          <table className="list"><thead><tr><th>פרויקט</th><th>תמחור</th><th>שעות</th><th>חויב</th><th /></tr></thead><tbody>
-            {d.projects.map(p => <tr key={p.id}><td>{p.title}{p.status === 'done' && <span className="pill" style={{ marginInlineStart: 6 }}>הסתיים</span>}</td>
-              <td>{p.billing_mode ? BILLING_MODES[p.billing_mode] : 'לפי ההגדרות'}{p.unit_price != null && ` · ${money(p.unit_price)}`}</td>
-              <td>{hours(p.seconds)}</td><td className="amt">{money(p.charged)}</td>
-              <td><button className="btn small ghost" type="button" onClick={() => setEditProject(p)}>עריכה</button></td></tr>)}
-          </tbody></table>) : <div className="empty">אין פרויקטים.</div>)}
-      </div>
-      {editProject && <ProjectForm clientId={d.client.id} project={editProject} onClose={() => setEditProject(null)} />}
-    </Modal>
-  )
 }

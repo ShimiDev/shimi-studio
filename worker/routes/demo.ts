@@ -43,6 +43,18 @@ function build(now = new Date()) {
     { id: 'mirpeset-album', client_id: 'mirpeset', title: 'אלבום "בין השורות"', billing_mode: 'fixed', unit_price: 1400000, quote_amount: 1400000, quoted_hours: 70, status: 'done' },
   ]
 
+  const products: Row[] = [
+    ['pr-rec', 'שעת הקלטה', 'הקלטה', 'hour', 18000, 'כולל טכנאי וציוד'],
+    ['pr-rec-day', 'יום הקלטה (8 שעות)', 'הקלטה', 'day', 120000, 'מחיר מוזל ליום מלא'],
+    ['pr-mix', 'מיקס לשיר', 'מיקס ומאסטר', 'song', 90000, 'עד 3 סבבי תיקונים'],
+    ['pr-master', 'מאסטר לשיר', 'מיקס ומאסטר', 'song', 30000, null],
+    ['pr-mixmaster', 'מיקס ומאסטר לשיר', 'מיקס ומאסטר', 'song', 120000, null],
+    ['pr-prod', 'הפקה מוזיקלית לשיר', 'הפקה', 'song', 350000, 'עיבוד, נגינה ותכנות'],
+    ['pr-album', 'חבילת אלבום (עד 10 שירים)', 'חבילות', 'project', 1800000, 'הקלטה, מיקס ומאסטר'],
+    ['pr-pod', 'הקלטה ועריכת פודקאסט', 'פודקאסט', 'hour', 18000, null],
+    ['pr-edit', 'עריכת ווקאל וכיוון', 'עריכה', 'hour', 15000, null],
+  ].map(([id, name, category, unit, price, description], i) => ({ id, name, category, unit, price, description, sort: i + 1 } as Row))
+
   // ---- שעות עבודה ב-90 הימים האחרונים ----
   const plan: { client: string; project: string; kinds: string[]; from: number }[] = [
     { client: 'noa', project: 'noa-album', kinds: ['recording', 'recording', 'production', 'edit', 'mix'], from: -110 },
@@ -90,9 +102,9 @@ function build(now = new Date()) {
   const charges: Row[] = []
   const payments: Row[] = []
   let cn = 0, pn = 0
-  const charge = (client_id: string, project_id: string | null, description: string, amount: number, day: number) => {
+  const charge = (client_id: string, project_id: string | null, description: string, amount: number, day: number, product?: [string, number, number]) => {
     const id = `ch${++cn}`
-    charges.push({ id, client_id, project_id, description, amount, charged_at: at(day, 20) })
+    charges.push({ id, client_id, project_id, description, amount, charged_at: at(day, 20), product_id: product?.[0] ?? null, quantity: product?.[1] ?? null, unit_price: product?.[2] ?? null })
     return id
   }
   const pay = (client_id: string, project_id: string | null, amount: number, method: string, day: number, notes: string | null = null) =>
@@ -112,8 +124,8 @@ function build(now = new Date()) {
   charge('noa', 'noa-album', 'מקדמה לאלבום (30%)', 540000, -105); pay('noa', 'noa-album', 540000, 'transfer', -104)
   charge('noa', 'noa-album', 'שלב שני: סיום הקלטות (30%)', 540000, -35); pay('noa', 'noa-album', 300000, 'bit', -30, 'שאר הסכום בהמשך החודש'); pay('noa', 'noa-album', 120000, 'bit', -5)
   // להקת החצר: לפי שיר
-  charge('hatzer', 'hatzer-ep', 'מיקס 2 שירים', 180000, -60); pay('hatzer', 'hatzer-ep', 180000, 'cash', -58)
-  charge('hatzer', 'hatzer-ep', 'מיקס 2 שירים', 180000, -14); pay('hatzer', 'hatzer-ep', 90000, 'bit', -10)
+  charge('hatzer', 'hatzer-ep', 'מיקס לשיר × 2', 180000, -60, ['pr-mix', 2, 90000]); pay('hatzer', 'hatzer-ep', 180000, 'cash', -58)
+  charge('hatzer', 'hatzer-ep', 'מיקס לשיר × 2', 180000, -14, ['pr-mix', 2, 90000]); pay('hatzer', 'hatzer-ep', 90000, 'bit', -10)
   // דנה: לפי שעה, תעריף ברירת המחדל
   charge('dana', 'dana-kids', 'הקלטות, 8 שעות', 120000, -40); pay('dana', 'dana-kids', 120000, 'credit', -38)
   charge('dana', 'dana-kids', 'הקלטות ועריכה, 6 שעות', 90000, -9)
@@ -121,7 +133,7 @@ function build(now = new Date()) {
   charge('choir', 'choir-hanuka', 'מקדמה לאלבום חנוכה', 300000, -38); pay('choir', 'choir-hanuka', 300000, 'check', -36, "צ'ק מס' 1043")
   charge('choir', 'choir-hanuka', 'שלב שני: הקלטות', 250000, -12); pay('choir', 'choir-hanuka', 250000, 'transfer', -11)
   // יובל: סינגל שולם במלואו
-  charge('yuval', 'yuval-single', 'מיקס ומאסטר לסינגל', 120000, -20); pay('yuval', 'yuval-single', 120000, 'bit', -20)
+  charge('yuval', 'yuval-single', 'מיקס ומאסטר לשיר', 120000, -20, ['pr-mixmaster', 1, 120000]); pay('yuval', 'yuval-single', 120000, 'bit', -20)
   // מרפסת: פרויקט סגור ומשולם
   charge('mirpeset', 'mirpeset-album', 'אלבום מלא', 1400000, -125); pay('mirpeset', 'mirpeset-album', 700000, 'transfer', -160); pay('mirpeset', 'mirpeset-album', 700000, 'transfer', -122)
 
@@ -173,7 +185,7 @@ function build(now = new Date()) {
     { id: 'r6', client_id: 'erev', text: 'לגבות את חודש שעבר מהפודקאסט', due_at: null, done_at: at(-20, 12) },
   ]
 
-  return { clients, projects, time, charges, payments, expenses, appts, reminders, at }
+  return { clients, products, projects, time, charges, payments, expenses, appts, reminders, at }
 }
 
 /** מוסיף את הקידומת לכל מזהה ולכל הפניה למזהה */
@@ -189,7 +201,7 @@ function insert(db: D1Database, table: string, row: Row) {
 }
 
 // סדר המחיקה: קודם מה שמפנה לאחרים
-const TABLES = ['time_entries', 'appointments', 'reminders', 'payments', 'charges', 'expenses', 'projects', 'clients'] as const
+const TABLES = ['time_entries', 'appointments', 'reminders', 'payments', 'charges', 'products', 'expenses', 'projects', 'clients'] as const
 
 export const demo = new Hono<AppEnv>()
 
@@ -207,8 +219,9 @@ demo.post('/', async c => {
     const { days, archived, ...r } = cl
     stmts.push(insert(db, 'clients', prefixed({ ...r, created_at: d.at(-(days as number), 12), archived_at: archived ? d.at(-110, 12) : null }, ['id'])))
   }
+  for (const r of d.products) stmts.push(insert(db, 'products', prefixed(r, ['id'])))
   for (const r of d.projects) stmts.push(insert(db, 'projects', prefixed({ ...r, created_at: d.at(-100, 12) }, ['id', 'client_id'])))
-  for (const r of d.charges) stmts.push(insert(db, 'charges', prefixed(r, ['id', 'client_id', 'project_id'])))
+  for (const r of d.charges) stmts.push(insert(db, 'charges', prefixed(r, ['id', 'client_id', 'project_id', 'product_id'])))
   for (const r of d.time) stmts.push(insert(db, 'time_entries', prefixed(r, ['id', 'client_id', 'project_id', 'charge_id'])))
   for (const r of d.payments) stmts.push(insert(db, 'payments', prefixed(r, ['id', 'client_id', 'project_id'])))
   for (const r of d.expenses) stmts.push(insert(db, 'expenses', prefixed(r, ['id'])))

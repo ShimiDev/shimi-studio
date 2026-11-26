@@ -1,10 +1,14 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../env'
 import { all, fail } from '../lib/db'
-import { body, oneOf, int, num } from '../lib/validate'
+import { body, oneOf, int, num, str, bool } from '../lib/validate'
 import type { Settings } from '../../shared/types'
 
-const DEFAULTS: Settings = { billing_mode: 'hourly', default_rate: 15000, vat_status: 'exempt', vat_rate: 0.18 }
+const DEFAULTS: Settings = {
+  billing_mode: 'hourly', default_rate: 15000, vat_status: 'exempt', vat_rate: 0.18,
+  studio_name: 'האולפן של שימי', studio_address: '', studio_phone: '', email_signature: '',
+  reminders_enabled: false, reminder_hours: 24,
+}
 
 export async function getSettings(db: D1Database): Promise<Settings> {
   const rows = await all<{ key: string; value: string }>(db, `SELECT key, value FROM settings`)
@@ -28,6 +32,10 @@ settings.put('/', async c => {
     if (r == null || r < 0 || r > 1) fail(400, 'שיעור מע"מ לא תקין')
     updates.push(['vat_rate', r])
   }
+  for (const [k, max] of [['studio_name', 80], ['studio_address', 200], ['studio_phone', 40], ['email_signature', 500]] as const)
+    if (k in b) updates.push([k, str(b, k, { max }) ?? ''])
+  if ('reminders_enabled' in b) updates.push(['reminders_enabled', bool(b, 'reminders_enabled')])
+  if ('reminder_hours' in b) updates.push(['reminder_hours', int(b, 'reminder_hours', { required: true, min: 1, max: 72 })])
   if (!updates.length) fail(400, 'אין מה לעדכן')
   await c.env.DB.batch(updates.map(([k, v]) =>
     c.env.DB.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)

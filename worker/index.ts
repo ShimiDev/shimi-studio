@@ -11,6 +11,10 @@ import { appointments, reminders } from './routes/calendar'
 import { settings } from './routes/settings'
 import { overview } from './routes/overview'
 import { demo } from './routes/demo'
+import { email } from './routes/email'
+import { products } from './routes/products'
+import { runReminders } from './lib/apptmail'
+import type { Env } from './env'
 
 const app = new Hono<AppEnv>().basePath('/api')
 
@@ -30,6 +34,8 @@ app.route('/appointments', appointments)
 app.route('/reminders', reminders)
 app.route('/settings', settings)
 app.route('/demo', demo)
+app.route('/email', email)
+app.route('/products', products)
 app.route('/', overview)
 
 app.notFound(c => c.json({ error: 'לא נמצא' }, 404))
@@ -39,4 +45,10 @@ app.onError((err, c) => {
   return c.json({ error: 'משהו השתבש בשרת. נסו שוב' }, 500)
 })
 
-export default app
+export default {
+  fetch: app.fetch,
+  // כל רבע שעה: תזכורות לתורים שמתקרבים (אם הופעל בהגדרות)
+  async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runReminders(env).then(r => console.log('reminders', r)))
+  },
+} satisfies ExportedHandler<Env>

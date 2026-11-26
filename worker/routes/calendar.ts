@@ -4,8 +4,9 @@ import type { AppEnv } from '../env'
 import { all, first, run, uid, must, fail, nowIso } from '../lib/db'
 import { body, str, iso, oneOf } from '../lib/validate'
 import type { Appointment, Reminder } from '../../shared/types'
+import { sendApptMail } from '../lib/apptmail'
 
-const APPT_SQL = `SELECT a.*, c.name AS client_name, c.color_a FROM appointments a LEFT JOIN clients c ON c.id = a.client_id`
+const APPT_SQL = `SELECT a.*, c.name AS client_name, c.color_a, c.email AS client_email FROM appointments a LEFT JOIN clients c ON c.id = a.client_id`
 
 export const appointments = new Hono<AppEnv>()
 
@@ -52,6 +53,18 @@ appointments.patch('/:id', async c => {
     'notes' in b ? str(b, 'notes', { max: 2000 }) : cur.notes,
     nowIso(), id)
   return c.json(await first<Appointment>(c.env.DB, `${APPT_SQL} WHERE a.id = ?`, id))
+})
+
+/** זימון / עדכון / ביטול במייל ללקוח */
+appointments.post('/:id/send', async c => {
+  const b = await body(c.req.raw)
+  const kind = oneOf(b, 'kind', ['invite', 'update', 'cancel', 'reminder'] as const)
+  try {
+    const r = await sendApptMail(c.env, c.req.param('id'), kind, { email: str(b, 'email', { max: 200 }), note: str(b, 'note', { max: 1000 }) })
+    return c.json({ ok: true, ...r, appt: await first<Appointment>(c.env.DB, `${APPT_SQL} WHERE a.id = ?`, c.req.param('id')) })
+  } catch (e) {
+    fail(400, e instanceof Error ? e.message : 'השליחה נכשלה')
+  }
 })
 
 appointments.delete('/:id', async c => {

@@ -78,6 +78,27 @@ export interface Appointment {
   notes: string | null
   client_name?: string | null
   color_a?: string | null
+  client_email?: string | null
+  invite_sent_at?: string | null
+  invite_email?: string | null
+  reminder_sent_at?: string | null
+}
+
+export type ProductUnit = 'hour' | 'song' | 'project' | 'day' | 'unit'
+export const PRODUCT_UNITS: Record<ProductUnit, { label: string; per: string }> = {
+  hour: { label: 'לשעה', per: 'שעות' }, song: { label: 'לשיר', per: 'שירים' }, project: { label: 'לפרויקט', per: 'פרויקטים' },
+  day: { label: 'ליום', per: 'ימים' }, unit: { label: 'ליחידה', per: 'יחידות' },
+}
+export interface Product {
+  id: string
+  name: string
+  category: string | null
+  unit: ProductUnit
+  price: number
+  description: string | null
+  active: number
+  sort: number
+  used?: number
 }
 
 export interface Charge {
@@ -88,6 +109,9 @@ export interface Charge {
   amount: number
   charged_at: string
   client_name?: string
+  product_id?: string | null
+  quantity?: number | null
+  unit_price?: number | null
 }
 
 export interface Payment {
@@ -99,6 +123,7 @@ export interface Payment {
   paid_at: string
   notes: string | null
   client_name?: string | null
+  invoice_ref?: string | null
 }
 
 export interface Expense {
@@ -125,6 +150,13 @@ export interface Settings {
   default_rate: number
   vat_status: 'exempt' | 'licensed'
   vat_rate: number
+  studio_name: string
+  studio_address: string
+  studio_phone: string
+  email_signature: string
+  reminders_enabled: boolean
+  /** כמה שעות לפני התור לשלוח תזכורת */
+  reminder_hours: number
 }
 
 export interface Dashboard {

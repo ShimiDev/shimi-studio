@@ -5,11 +5,12 @@ import { spoken } from './format'
 import { entrySeconds } from '../../shared/time'
 import { workKind, type RunningClock, type TimeEntry, type WorkKind } from '../../shared/types'
 
-export type Route = { page: 'clients' } | { page: 'control'; clientId?: string } | { page: 'calendar' } | { page: 'money' } | { page: 'settings' }
+export type Route = { page: 'clients' } | { page: 'client'; clientId: string } | { page: 'control'; clientId?: string } | { page: 'calendar' } | { page: 'money' } | { page: 'settings' }
 
 function parseHash(): Route {
   const [, page, id] = location.hash.split('/')
   if (page === 'control') return { page, clientId: id || undefined }
+  if (page === 'client' && id) return { page, clientId: id }
   if (page === 'calendar' || page === 'money' || page === 'settings') return { page }
   return { page: 'clients' }
 }
@@ -55,7 +56,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => removeEventListener('hashchange', on)
   }, [])
   const go = useCallback((r: Route) => {
-    location.hash = r.page === 'control' && r.clientId ? `#/control/${r.clientId}` : `#/${r.page}`
+    location.hash = (r.page === 'control' || r.page === 'client') && r.clientId ? `#/${r.page}/${r.clientId}` : `#/${r.page}`
+    scrollTo(0, 0)
   }, [])
 
   const toast = useCallback((msg: string, err = false) => {

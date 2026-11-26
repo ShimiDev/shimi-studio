@@ -3,7 +3,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../env'
 import { all, first, run, uid, must, fail, nowIso } from '../lib/db'
-import { body, str, int, oneOf, iso } from '../lib/validate'
+import { body, str, int, num, oneOf, iso } from '../lib/validate'
 import { getSettings } from './settings'
 import { SECONDS_SQL } from './clients'
 import type { BillingMode, ChargePreview, Charge, Client, Expense, Payment, Project } from '../../shared/types'
@@ -84,11 +84,24 @@ charges.post('/', async c => {
   } else {
     must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ?`, client_id), 'הלקוח לא נמצא')
   }
+  // חיוב מפריט במחירון: כמות × מחיר ליחידה
+  const product_id = str(b, 'product_id')
+  let quantity: number | null = null, unit_price: number | null = null
+  if (product_id) {
+    const p = must(await first<{ name: string; price: number }>(c.env.DB, `SELECT name, price FROM products WHERE id = ?`, product_id), 'הפריט לא נמצא במחירון')
+    const q = num(b, 'quantity') ?? 1
+    if (!(q > 0) || q > 10000) fail(400, 'כמות לא תקינה')
+    quantity = q
+    const up = int(b, 'unit_price', { min: 0 }) ?? p.price
+    unit_price = up
+    amount ??= Math.round(q * up)
+    description ??= q === 1 ? p.name : `${p.name} × ${q}`
+  }
   if (amount == null) fail(400, 'חסר סכום')
   if (!description) fail(400, 'חסר תיאור')
   stmts.unshift(c.env.DB.prepare(
-    `INSERT INTO charges (id, client_id, project_id, description, amount, charged_at) VALUES (?,?,?,?,?,?)`,
-  ).bind(id, client_id, project_id, description, amount, iso(b, 'charged_at') ?? nowIso()))
+    `INSERT INTO charges (id, client_id, project_id, description, amount, charged_at, product_id, quantity, unit_price) VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).bind(id, client_id, project_id, description, amount, iso(b, 'charged_at') ?? nowIso(), product_id, quantity, unit_price))
   await c.env.DB.batch(stmts)
   return c.json(await first<Charge>(c.env.DB, `SELECT * FROM charges WHERE id = ?`, id), 201)
 })

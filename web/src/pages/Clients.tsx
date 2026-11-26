@@ -77,7 +77,10 @@ export function ClientsPage() {
                   onClick={e => { e.stopPropagation(); if (working) stopClock(); else setMenu({ el: e.currentTarget, c }) }}>
                   {working ? `${wk!.label} · רץ` : '⏱ שעון עבודה'}
                 </button>
-                <span className="go">לחדר ←</span>
+                <span className="go">
+                  <button className="go-alt quick" type="button" onClick={e => { e.stopPropagation(); go({ page: 'client', clientId: c.id }) }}>כרטיס לקוח</button>
+                  לחדר ←
+                </span>
               </div>
             </div>
           )

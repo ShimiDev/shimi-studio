@@ -86,7 +86,13 @@ export function CalendarPage() {
     setData(items.map(x => x.id === a.id ? { ...x, starts_at, ends_at } : x))
     try {
       await api.patch(`/appointments/${a.id}`, { starts_at, ends_at })
-      toast(`${a.client_name ?? a.title ?? 'התור'} הועבר ל${DOW[dowOf(israelDate(new Date(starts_at)))]} ${time(starts_at)}`)
+      let sent = ''
+      // ללקוח כבר נשלח זימון? שואלים אם לעדכן אותו, כמו ביומן גוגל
+      if (a.invite_sent_at && a.status === 'scheduled' && confirm(`לשלוח ל${a.client_name ?? 'לקוח'} עדכון במייל על המועד החדש?`)) {
+        try { const r = await api.post<{ to: string }>(`/appointments/${a.id}/send`, { kind: 'update' }); sent = ` ונשלח עדכון ל-${r.to}` }
+        catch (e) { fail(e) }
+      }
+      toast(`${a.client_name ?? a.title ?? 'התור'} הועבר ל${DOW[dowOf(israelDate(new Date(starts_at)))]} ${time(starts_at)}${sent}`)
       bump()
     } catch (e) { fail(e); reload() }
   }
@@ -135,7 +141,10 @@ export function CalendarPage() {
       {edit && <AppointmentForm appt={edit.appt} start={edit.start} end={edit.end} onClose={() => setEdit(null)} />}
       {edit?.appt?.client_id && (
         <div style={{ position: 'fixed', bottom: 20, insetInlineEnd: 20, zIndex: 55 }}>
-          <button className="btn primary" type="button" onClick={() => { const id = edit.appt!.client_id!; setEdit(null); go({ page: 'control', clientId: id }) }}>לחדר עם {edit.appt.client_name} ←</button>
+          <div className="row">
+            <button className="btn" style={{ background: 'var(--panel)' }} type="button" onClick={() => { const id = edit.appt!.client_id!; setEdit(null); go({ page: 'client', clientId: id }) }}>כרטיס {edit.appt.client_name}</button>
+            <button className="btn primary" type="button" onClick={() => { const id = edit.appt!.client_id!; setEdit(null); go({ page: 'control', clientId: id }) }}>לחדר עם {edit.appt.client_name} ←</button>
+          </div>
         </div>
       )}
     </div>

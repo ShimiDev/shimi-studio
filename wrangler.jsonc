@@ -25,5 +25,7 @@
     // ה-AUD של אפליקציית ה-Access (לא סוד). רשות: בלעדיו נבדקים חתימת הצוות והמנפיק בלבד
     "ACCESS_AUD": "13a07748bd0eee639e109b4f46e30bd6ffa023a7fc4714cf91760691aa138ae4"
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // תזכורות אוטומטיות לתורים (בחינם: עד 5 משימות מתוזמנות)
+  "triggers": { "crons": ["*/15 * * * *"] }
 }

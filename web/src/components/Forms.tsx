@@ -6,7 +6,8 @@ import { Modal, FormShell } from './Modal'
 import { toAgorot, fromAgorot, toLocalInput, fromLocalInput, money, hours } from '../format'
 import {
   CLIENT_KINDS, PAY_METHODS, EXPENSE_CATEGORIES, BILLING_MODES, WORK_KINDS,
-  type Client, type ClientKind, type Project, type ClientSummary, type ChargePreview, type Appointment, type BillingMode,
+  PRODUCT_UNITS,
+  type Client, type ClientKind, type Project, type ClientSummary, type ChargePreview, type Appointment, type BillingMode, type Product,
 } from '../../../shared/types'
 
 /** עזר קטן לטפסים: שדות, מצב שמירה ושגיאה */
@@ -108,6 +109,13 @@ export function ProjectForm({ clientId, project, onClose }: { clientId: string; 
     unit_price: fromAgorot(project?.unit_price), quote_amount: fromAgorot(project?.quote_amount),
     quoted_hours: project?.quoted_hours?.toString() ?? '', done: project?.status === 'done',
   })
+  const prods = useData<Product[]>('/products')
+  const basis = (prods.data ?? []).filter(p => p.unit === 'hour' || p.unit === 'song' || p.unit === 'project')
+  const fromProduct = (id: string) => {
+    const p = basis.find(x => x.id === id); if (!p) return
+    const mode: BillingMode = p.unit === 'hour' ? 'hourly' : p.unit === 'song' ? 'per_song' : 'fixed'
+    f.setV(s => ({ ...s, billing_mode: mode, unit_price: fromAgorot(p.price), quote_amount: mode === 'fixed' ? fromAgorot(p.price) : s.quote_amount, title: s.title || p.name }))
+  }
   const priceLabel = f.v.billing_mode === 'per_song' ? 'מחיר לשיר (₪)' : f.v.billing_mode === 'fixed' ? 'מחיר כולל (₪)' : 'מחיר לשעה (₪)'
   const save = () => f.run(async () => {
     const payload = {
@@ -122,6 +130,14 @@ export function ProjectForm({ clientId, project, onClose }: { clientId: string; 
     <Modal title={project ? 'עריכת פרויקט' : 'פרויקט חדש'} onClose={onClose}>
       <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
         <label className="field"><span>שם הפרויקט</span><input value={f.v.title} onChange={f.set('title')} /></label>
+        {basis.length > 0 && (
+          <label className="field"><span>תמחור לפי פריט מהמחירון (לא חובה)</span>
+            <select value="" onChange={e => fromProduct(e.target.value)}>
+              <option value="">בחירה ממלאת את השיטה והמחיר</option>
+              {basis.map(p => <option key={p.id} value={p.id}>{p.name} · {money(p.price)} {PRODUCT_UNITS[p.unit].label}</option>)}
+            </select>
+          </label>
+        )}
         <label className="field"><span>שיטת תמחור</span>
           <select value={f.v.billing_mode} onChange={f.set('billing_mode')}>
             <option value="">לפי ההגדרות הכלליות</option>
@@ -170,44 +186,70 @@ export function PaymentForm({ clientId, onClose }: { clientId?: string; onClose(
 // ---------------- חיוב (ידני או מתוך שעות) ----------------
 export function ChargeForm({ clientId, onClose }: { clientId: string; onClose(): void }) {
   const { bump, toast } = useStore()
-  const f = useForm({ project_id: '', fromTime: true, songs: '1', amount: '', description: '' })
+  const f = useForm({ project_id: '', mode: 'time' as 'time' | 'product' | 'manual', songs: '1', amount: '', description: '', product_id: '', qty: '1', price: '' })
   const [pv, setPv] = useState<ChargePreview | null>(null)
+  const prods = useData<Product[]>('/products')
   // ברירת מחדל: הפרויקט הפעיל הראשון של הלקוח
   const det = useData<{ projects: Project[] }>(`/clients/${clientId}`)
   const firstProject = det.data?.projects.find(p => p.status === 'active')?.id
   useEffect(() => { if (firstProject) f.setV(s => (s.project_id ? s : { ...s, project_id: firstProject })) }, [firstProject]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!f.v.fromTime) return
+    if (f.v.mode !== 'time') return
     const q = new URLSearchParams({ client_id: clientId, ...(f.v.project_id ? { project_id: f.v.project_id } : {}), songs: f.v.songs || '0' })
     api.get<ChargePreview>(`/charges/preview?${q}`).then(p => { setPv(p); f.setV(s => ({ ...s, amount: fromAgorot(p.amount), description: p.description })) }).catch(() => setPv(null))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, f.v.project_id, f.v.fromTime, f.v.songs])
+  }, [clientId, f.v.project_id, f.v.mode, f.v.songs])
+  // מהמחירון: כמות × מחיר
+  const prod = prods.data?.find(p => p.id === f.v.product_id)
+  useEffect(() => {
+    if (f.v.mode !== 'product' || !prod) return
+    const q = Number(f.v.qty) || 0, price = toAgorot(f.v.price) ?? prod.price
+    f.setV(s => ({ ...s, amount: fromAgorot(Math.round(q * price)), description: q === 1 ? prod.name : `${prod.name} × ${q}` }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.v.mode, f.v.product_id, f.v.qty, f.v.price])
   const save = () => f.run(async () => {
     const amount = toAgorot(f.v.amount)
     if (amount == null) throw new ApiError('צריך סכום', 400)
     await api.post('/charges', {
       client_id: clientId, project_id: f.v.project_id || null, amount, description: f.v.description,
-      ...(f.v.fromTime ? { from_time: true, songs: Number(f.v.songs) || 0 } : {}),
+      ...(f.v.mode === 'time' ? { from_time: true, songs: Number(f.v.songs) || 0 } : {}),
+      ...(f.v.mode === 'product' && prod ? { product_id: prod.id, quantity: Number(f.v.qty) || 1, unit_price: toAgorot(f.v.price) ?? prod.price } : {}),
     })
     bump(); toast(`נרשם חיוב של ${money(amount)}`); onClose()
   })
+  const setMode = (mode: 'time' | 'product' | 'manual') => f.setV(s => ({ ...s, mode, amount: '', description: '' }))
   return (
     <Modal title="חיוב לקוח" onClose={onClose}>
       <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose} submit="חיוב">
         <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
         <div className="seg" style={{ marginBottom: 12 }}>
-          <button type="button" aria-pressed={f.v.fromTime} onClick={() => f.setV(s => ({ ...s, fromTime: true }))}>מתוך השעות שנרשמו</button>
-          <button type="button" aria-pressed={!f.v.fromTime} onClick={() => f.setV(s => ({ ...s, fromTime: false, amount: '', description: '' }))}>חיוב ידני</button>
+          <button type="button" aria-pressed={f.v.mode === 'time'} onClick={() => setMode('time')}>מתוך השעות שנרשמו</button>
+          <button type="button" aria-pressed={f.v.mode === 'product'} onClick={() => setMode('product')}>מהמחירון</button>
+          <button type="button" aria-pressed={f.v.mode === 'manual'} onClick={() => setMode('manual')}>חיוב ידני</button>
         </div>
-        {f.v.fromTime && pv && (
+        {f.v.mode === 'time' && pv && (
           <p className="mute" style={{ marginTop: 0 }}>
             {BILLING_MODES[pv.mode]} · שעות פתוחות לחיוב: <b>{hours(pv.seconds)}</b>
             {pv.mode === 'hourly' && <> · תעריף {money(pv.rate)}</>}
           </p>
         )}
-        {f.v.fromTime && pv?.mode === 'per_song' && (
+        {f.v.mode === 'time' && pv?.mode === 'per_song' && (
           <label className="field"><span>כמה שירים</span><input inputMode="numeric" value={f.v.songs} onChange={f.set('songs')} /></label>
         )}
+        {f.v.mode === 'product' && (prods.data?.length ? (
+          <>
+            <label className="field"><span>פריט</span>
+              <select value={f.v.product_id} onChange={e => { const p = prods.data!.find(x => x.id === e.target.value); f.setV(s => ({ ...s, product_id: e.target.value, price: fromAgorot(p?.price) })) }}>
+                <option value="" disabled>בחרו מהמחירון</option>
+                {prods.data.map(p => <option key={p.id} value={p.id}>{p.name} · {money(p.price)} {PRODUCT_UNITS[p.unit].label}</option>)}
+              </select>
+            </label>
+            {prod && <div className="fields2">
+              <label className="field"><span>כמות ({PRODUCT_UNITS[prod.unit].per})</span><input inputMode="decimal" value={f.v.qty} onChange={f.set('qty')} /></label>
+              <label className="field"><span>מחיר ליחידה (₪)</span><input inputMode="decimal" value={f.v.price} onChange={f.set('price')} /></label>
+            </div>}
+          </>
+        ) : <p className="mute" style={{ marginTop: 0 }}>המחירון ריק. מוסיפים פריטים במסך ההגדרות.</p>)}
         <div className="fields2">
           <label className="field"><span>סכום (₪)</span><input inputMode="decimal" value={f.v.amount} onChange={f.set('amount')} /></label>
           <label className="field"><span>תיאור</span><input value={f.v.description} onChange={f.set('description')} /></label>
@@ -220,25 +262,49 @@ export function ChargeForm({ clientId, onClose }: { clientId: string; onClose():
 // ---------------- תור ----------------
 export function AppointmentForm({ appt, clientId, start, end, onClose }: { appt?: Appointment; clientId?: string; start?: Date; end?: Date; onClose(): void }) {
   const { bump, toast } = useStore()
+  const mail = useData<{ configured: boolean }>('/email')
   const s0 = appt ? new Date(appt.starts_at) : (start ?? nextHour())
   const dur = appt ? (Date.parse(appt.ends_at) - Date.parse(appt.starts_at)) / 60000 : start && end ? Math.round((end.getTime() - start.getTime()) / 60000) : 180
-  const f = useForm({ client_id: appt?.client_id ?? clientId ?? '', title: appt?.title ?? '', kind: appt?.kind ?? 'recording', starts: toLocalInput(s0), minutes: String(dur), notes: appt?.notes ?? '' })
+  const f = useForm({ client_id: appt?.client_id ?? clientId ?? '', title: appt?.title ?? '', kind: appt?.kind ?? 'recording', starts: toLocalInput(s0), minutes: String(dur), notes: appt?.notes ?? '', send: true })
+  const clients = useData<ClientSummary[]>('/clients')
+  const client = clients.data?.find(c => c.id === f.v.client_id)
+  const email = appt?.invite_email ?? client?.email ?? null
+  const canMail = !!mail.data?.configured && !!f.v.client_id && !!email
+  const invited = !!appt?.invite_sent_at
+  let mailFailed = false
+  const send = async (id: string, kind: 'invite' | 'update' | 'cancel') => {
+    try { const r = await api.post<{ to: string }>(`/appointments/${id}/send`, { kind }); return r.to }
+    catch (e) { mailFailed = true; toast(e instanceof ApiError ? `התור נשמר, אבל המייל לא נשלח: ${e.message}` : 'המייל לא נשלח', true); return null }
+  }
   const save = () => f.run(async () => {
     const starts = fromLocalInput(f.v.starts), mins = Number(f.v.minutes)
     if (!(mins > 0)) throw new ApiError('משך לא תקין', 400)
     const body = { client_id: f.v.client_id || null, title: f.v.title || null, kind: f.v.kind, starts_at: starts, ends_at: new Date(Date.parse(starts) + mins * 60000).toISOString(), notes: f.v.notes || null }
-    if (appt) { await api.patch(`/appointments/${appt.id}`, body); toast('התור עודכן') }
-    else {
-      const r = await api.post<{ overlap: boolean }>('/appointments', body)
-      toast(r.overlap ? 'התור נקבע. שימו לב: יש חפיפה עם תור אחר' : 'התור נקבע')
+    if (appt) {
+      await api.patch(`/appointments/${appt.id}`, body)
+      const moved = body.starts_at !== new Date(appt.starts_at).toISOString() || body.ends_at !== new Date(appt.ends_at).toISOString()
+      const to = invited && moved && f.v.send && canMail ? await send(appt.id, 'update') : null
+      if (!mailFailed) toast(to ? `התור עודכן ונשלח עדכון ל-${to}` : 'התור עודכן')
+    } else {
+      const r = await api.post<{ id: string; overlap: boolean }>('/appointments', body)
+      const to = f.v.send && canMail ? await send(r.id, 'invite') : null
+      if (!mailFailed) toast([r.overlap ? 'התור נקבע. שימו לב: יש חפיפה עם תור אחר' : 'התור נקבע', to ? `זימון נשלח ל-${to}` : ''].filter(Boolean).join('. '))
     }
     bump(); onClose()
   })
-  const setStatus = (status: string) => f.run(async () => { await api.patch(`/appointments/${appt!.id}`, { status }); bump(); onClose() })
+  const cancel = () => f.run(async () => {
+    await api.patch(`/appointments/${appt!.id}`, { status: 'cancelled' })
+    const to = invited && f.v.send && canMail ? await send(appt!.id, 'cancel') : null
+    if (!mailFailed) toast(to ? `התור בוטל והודעה נשלחה ל-${to}` : 'התור בוטל'); bump(); onClose()
+  })
+  const sendNow = () => f.run(async () => {
+    const r = await api.post<{ to: string }>(`/appointments/${appt!.id}/send`, { kind: invited ? 'update' : 'invite' })
+    toast(`${invited ? 'עדכון' : 'זימון'} נשלח ל-${r.to}`); bump(); onClose()
+  })
   return (
     <Modal title={appt ? 'עריכת תור' : 'תור חדש'} onClose={onClose}>
       <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}
-        extra={appt && appt.status === 'scheduled' && <button className="btn small danger" type="button" onClick={() => setStatus('cancelled')}>ביטול התור</button>}>
+        extra={appt && appt.status === 'scheduled' && <button className="btn small danger" type="button" onClick={cancel}>ביטול התור</button>}>
         <ClientSelect value={f.v.client_id} onChange={v => f.setV(s => ({ ...s, client_id: v }))} allowNone="בלי לקוח (תור אישי)" />
         <div className="fields2">
           <label className="field"><span>מתי</span><input type="datetime-local" value={f.v.starts} onChange={f.set('starts')} /></label>
@@ -254,6 +320,19 @@ export function AppointmentForm({ appt, clientId, start, end, onClose }: { appt?
           <label className="field"><span>כותרת (לא חובה)</span><input value={f.v.title} onChange={f.set('title')} placeholder="למשל: ווקאל לסינגל" /></label>
         </div>
         <label className="field"><span>הערות</span><textarea value={f.v.notes} onChange={f.set('notes')} /></label>
+        {f.v.client_id && (
+          <div className="invite-box">
+            {!mail.data?.configured ? <span className="mute">זימון במייל: צריך לחבר את תיבת המייל במסך ההגדרות.</span>
+              : !email ? <span className="mute">ללקוח אין מייל. מוסיפים אותו בכרטיס הלקוח ואז אפשר לשלוח זימון.</span>
+                : <>
+                  {invited && <span className="pill ok">זימון נשלח ל-{appt!.invite_email}</span>}
+                  {appt?.reminder_sent_at && <span className="pill">תזכורת נשלחה</span>}
+                  <label className="check"><input type="checkbox" checked={f.v.send} onChange={f.set('send')} />
+                    {!appt ? `לשלוח זימון ליומן ל-${email}` : invited ? 'לשלוח ללקוח עדכון אם המועד משתנה או מתבטל' : `לשלוח זימון ל-${email}`}</label>
+                  {appt && appt.status === 'scheduled' && <button className="btn small" type="button" disabled={f.busy} onClick={sendNow}>{invited ? 'שליחה חוזרת עכשיו' : 'שליחת זימון עכשיו'}</button>}
+                </>}
+          </div>
+        )}
       </FormShell>
     </Modal>
   )

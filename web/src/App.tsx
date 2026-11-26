@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore, type Route } from './store'
 import { ClientsPage } from './pages/Clients'
 import { ControlRoom } from './pages/ControlRoom'
+import { ClientPage } from './pages/ClientPage'
 import { CalendarPage } from './pages/Calendar'
 import { MoneyPage } from './pages/Money'
 import { SettingsPage } from './pages/Settings'
@@ -36,7 +37,7 @@ export function App() {
         </a>
         <nav className="tabs" aria-label="ניווט ראשי">
           {TABS.map(t => (
-            <button key={t.page} className="tab" type="button" aria-current={route.page === t.page ? 'page' : undefined}
+            <button key={t.page} className="tab" type="button" aria-current={route.page === t.page || (route.page === 'client' && t.page === 'clients') ? 'page' : undefined}
               onClick={() => go(t.page === 'control' ? { page: 'control', clientId: route.page === 'control' ? route.clientId : clock?.client_id ?? undefined } : { page: t.page } as Route)}>
               {t.label}
             </button>
@@ -47,6 +48,7 @@ export function App() {
       </header>
       <main>
         {route.page === 'clients' && <ClientsPage />}
+        {route.page === 'client' && <ClientPage key={route.clientId} clientId={route.clientId} />}
         {route.page === 'control' && <ControlRoom clientId={route.clientId} />}
         {route.page === 'calendar' && <CalendarPage />}
         {route.page === 'money' && <MoneyPage />}
