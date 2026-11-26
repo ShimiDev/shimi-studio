@@ -1,4 +1,4 @@
-// כסף: סיכום חודשי, תשלומים, הוצאות וחיובים
+// ניהול כספים: סיכום חודשי, תשלומים, הוצאות וחיובים
 import { useState } from 'react'
 import { useStore, useData } from '../store'
 import { api } from '../api'
@@ -42,7 +42,7 @@ export function MoneyPage() {
   return (
     <>
       <div className="ctools">
-        <h1 className="page" style={{ margin: 0 }}>כסף</h1>
+        <h1 className="page" style={{ margin: 0 }}>ניהול כספים</h1>
         <div className="row">
           <button className="btn small" type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="חודש קודם">→</button>
           <b style={{ minWidth: 110, textAlign: 'center' }}>{monthName(month)}</b>

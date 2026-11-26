@@ -14,7 +14,7 @@ const TABS: { page: Route['page']; label: string }[] = [
   { page: 'clients', label: 'לקוחות' },
   { page: 'control', label: 'חדר בקרה' },
   { page: 'calendar', label: 'יומן' },
-  { page: 'money', label: 'כסף' },
+  { page: 'money', label: 'ניהול כספים' },
   { page: 'settings', label: 'הגדרות' },
 ]
 
