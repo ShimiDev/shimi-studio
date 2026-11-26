@@ -218,10 +218,10 @@ export function ChargeForm({ clientId, onClose }: { clientId: string; onClose():
 }
 
 // ---------------- תור ----------------
-export function AppointmentForm({ appt, clientId, start, onClose }: { appt?: Appointment; clientId?: string; start?: Date; onClose(): void }) {
+export function AppointmentForm({ appt, clientId, start, end, onClose }: { appt?: Appointment; clientId?: string; start?: Date; end?: Date; onClose(): void }) {
   const { bump, toast } = useStore()
   const s0 = appt ? new Date(appt.starts_at) : (start ?? nextHour())
-  const dur = appt ? (Date.parse(appt.ends_at) - Date.parse(appt.starts_at)) / 60000 : 180
+  const dur = appt ? (Date.parse(appt.ends_at) - Date.parse(appt.starts_at)) / 60000 : start && end ? Math.round((end.getTime() - start.getTime()) / 60000) : 180
   const f = useForm({ client_id: appt?.client_id ?? clientId ?? '', title: appt?.title ?? '', kind: appt?.kind ?? 'recording', starts: toLocalInput(s0), minutes: String(dur), notes: appt?.notes ?? '' })
   const save = () => f.run(async () => {
     const starts = fromLocalInput(f.v.starts), mins = Number(f.v.minutes)

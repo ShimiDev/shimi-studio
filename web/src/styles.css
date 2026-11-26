@@ -231,14 +231,95 @@ h1.page { font-family: var(--f-display); font-weight: 700; font-size: 22px; marg
 .app.rec .mini { display: none }
 
 /* ---------- יומן ---------- */
-.week { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); gap: 8px; overflow-x: auto }
-.day { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; min-height: 180px }
-.day.is-today { border-color: var(--gold) }
-.day h5 { margin: 0 0 8px; font-size: 13px; color: var(--mute); font-weight: 500; display: flex; justify-content: space-between }
-.day h5 b { color: var(--fg) }
-.appt { display: block; width: 100%; text-align: start; background: var(--panel2); border: 0; border-inline-start: 3px solid var(--c, var(--gold)); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 13px }
-.appt time { font-family: var(--f-mono); color: var(--mute); font-size: 12px; direction: ltr; display: block; text-align: right }
-.appt.cancelled { opacity: .45; text-decoration: line-through }
+.cal { display: flex; flex-direction: column; gap: 12px }
+.cal-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center }
+.cal-title h1 { font-family: var(--f-display); font-size: 24px; margin: 0; line-height: 1.15 }
+.cal-title .heb { color: var(--gold-hi); font-size: 14px }
+.cal-nav { display: flex; gap: 2px }
+.icon-btn { width: 34px; height: 34px; border-radius: 50%; border: 0; background: transparent; color: var(--fg); font-size: 22px; line-height: 1 }
+.icon-btn:hover { background: var(--panel2) }
+.cal-hint { font-size: 12px; margin: 8px 2px 0 }
+.hd { color: var(--mute2); font-size: 12px }
+
+/* חגים */
+.hol { display: block; font-size: 11.5px; line-height: 1.35; padding: 1px 6px; border-radius: 6px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.hol-yomtov { background: rgba(201, 164, 106, .26); color: var(--gold-hi); font-weight: 600 }
+.hol-erev, .hol-chol { background: rgba(201, 164, 106, .11); color: var(--gold) }
+.hol-fast { background: rgba(163, 156, 163, .14); color: var(--mute) }
+.hol-modern { background: rgba(120, 170, 255, .14); color: #a9c6ff }
+.hol-minor { background: rgba(185, 167, 255, .13); color: var(--new) }
+.hol-rc { background: transparent; color: var(--mute2); padding-inline: 0 }
+
+/* רשת שעות (יום / שבוע) */
+.tg { --gut: 54px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; height: calc(100vh - 190px); min-height: 460px }
+.tg-head, .tg-body { display: grid; grid-template-columns: var(--gut) repeat(var(--n), minmax(96px, 1fr)) }
+.tg-head { border-bottom: 1px solid var(--line); overflow-x: hidden; scrollbar-gutter: stable }
+.tg-body { overflow: auto; position: relative; flex: 1; scrollbar-gutter: stable; touch-action: pan-y }
+.tg-dh { padding: 6px 6px 8px; border-inline-start: 1px solid var(--line); min-width: 0 }
+.tg-dh.closed, .tg-col.closed { background: rgba(255, 255, 255, .018) }
+.tg-date { display: flex; align-items: baseline; gap: 6px; border: 0; background: transparent; color: var(--fg); padding: 2px 4px; border-radius: 8px; width: 100%; text-align: start }
+.tg-date:hover { background: var(--panel2) }
+.tg-date .dow { color: var(--mute); font-size: 13px }
+.tg-date b { font-size: 20px; font-weight: 600; font-family: var(--f-display) }
+.tg-dh.is-today .tg-date b { background: var(--gold); color: var(--gold-ink); border-radius: 50%; min-width: 32px; height: 32px; display: inline-grid; place-items: center; font-size: 17px }
+.tg-dh.is-today .dow { color: var(--gold-hi) }
+.tg.single .tg-date b { font-size: 26px }
+.tg-allday { min-height: 6px }
+.tg-gutter { position: relative }
+.tg-hour { height: var(--hour); position: relative }
+.tg-hour span { position: absolute; top: -8px; inset-inline-end: 8px; font-family: var(--f-mono); font-size: 11px; color: var(--mute2) }
+.tg-col { position: relative; border-inline-start: 1px solid var(--line); cursor: cell; user-select: none; -webkit-user-select: none }
+.tg-line { height: var(--hour); border-top: 1px solid var(--line); box-sizing: border-box }
+.tg-line:first-child { border-top: 0 }
+.tg-now { position: absolute; inset-inline: 0; height: 2px; background: var(--rec); z-index: 3; pointer-events: none }
+.tg-now::before { content: ""; position: absolute; inset-inline-start: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--rec) }
+
+.ev { position: absolute; z-index: 2; box-sizing: border-box; overflow: hidden; border-radius: 8px; padding: 3px 7px; font-size: 12.5px; line-height: 1.3; cursor: grab; touch-action: none;
+  background: color-mix(in srgb, var(--c) 22%, var(--panel2)); border-inline-start: 3px solid var(--c); color: var(--fg); box-shadow: 0 0 0 1px var(--panel) }
+.ev:hover { background: color-mix(in srgb, var(--c) 30%, var(--panel2)) }
+.ev:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 1px }
+.ev b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ev time { display: block; font-family: var(--f-mono); font-size: 11px; color: var(--mute); direction: ltr; text-align: right }
+.ev-sub { display: block; color: var(--mute); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ev-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ev-line b, .ev-line time { display: inline }
+.ev.cancelled { opacity: .45; text-decoration: line-through }
+.ev.done { opacity: .75 }
+.ev.ghosted { opacity: .3 }
+.ev.ghost { --c: var(--gold); background: rgba(201, 164, 106, .25); border: 1px dashed var(--gold); pointer-events: none; z-index: 4; color: var(--gold-hi) }
+.ev.dragging { z-index: 5; pointer-events: none; box-shadow: var(--shadow-pop); cursor: grabbing }
+.ev-resize { position: absolute; inset-inline: 0; bottom: 0; height: 8px; cursor: ns-resize }
+.ev-resize::after { content: ""; position: absolute; bottom: 2px; left: 50%; width: 18px; height: 2px; margin-left: -9px; border-radius: 2px; background: var(--c); opacity: 0; transition: opacity .15s }
+.ev:hover .ev-resize::after { opacity: .9 }
+
+/* חודש */
+.mg { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; touch-action: pan-y }
+.mg-head { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line) }
+.mg-head div { padding: 8px 10px; font-size: 13px; color: var(--mute) }
+.mg-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-height: calc(100vh - 250px) }
+.mg-cell { border-top: 1px solid var(--line); border-inline-start: 1px solid var(--line); padding: 4px 5px 6px; min-width: 0; cursor: cell; display: flex; flex-direction: column; gap: 2px }
+.mg-cell:nth-child(7n+1) { border-inline-start: 0 }
+.mg-cell.out { background: rgba(0, 0, 0, .22) }
+.mg-cell.out .mg-num { color: var(--mute2) }
+.mg-cell.closed:not(.out) { background: rgba(255, 255, 255, .018) }
+.mg-cell.drop { background: rgba(201, 164, 106, .14); box-shadow: inset 0 0 0 2px var(--gold) }
+.mg-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; pointer-events: none }
+.mg-top > * { pointer-events: auto }
+.mg-num { border: 0; background: transparent; color: var(--fg); font-size: 14px; font-weight: 600; min-width: 26px; height: 26px; border-radius: 50%; padding: 0 }
+.mg-num:hover { background: var(--panel2) }
+.mg-cell.is-today .mg-num { background: var(--gold); color: var(--gold-ink) }
+.mg-ev { font-size: 12px; padding: 2px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; touch-action: none;
+  background: color-mix(in srgb, var(--c) 18%, transparent); border-inline-start: 3px solid var(--c) }
+.mg-ev time { font-family: var(--f-mono); font-size: 11px; color: var(--mute) }
+.mg-ev.cancelled { opacity: .45; text-decoration: line-through }
+.mg-ev.ghosted { opacity: .35 }
+.mg-more { border: 0; background: transparent; color: var(--mute); font-size: 12px; text-align: start; padding: 0 6px }
+.mg-more:hover { color: var(--fg) }
+@media (max-width: 720px) {
+  .mg-grid { grid-template-rows: none !important; grid-auto-rows: minmax(78px, auto) }
+  .mg-ev time, .mg-cell .hol:not(.hol-yomtov) { display: none }
+  .tg { height: calc(100vh - 230px) }
+}
 
 /* ---------- כסף ---------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px }
@@ -253,3 +334,4 @@ h1.page { font-family: var(--f-display); font-weight: 700; font-size: 22px; marg
 .bars .track i { display: block; height: 100%; background: var(--gold); border-radius: 4px }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important } }
+.tg.single .tg-dh.is-today .tg-date b { font-size: 17px }
