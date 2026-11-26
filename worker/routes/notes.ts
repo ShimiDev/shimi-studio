@@ -8,6 +8,10 @@ import type { Note } from '../../shared/types'
 export const notes = new Hono<AppEnv>()
 
 notes.get('/', async c => {
+  // הערות מסשנים פרטיים (בלי לקוח). בלי זה הן נשמרות ואין איפה לראות אותן
+  if (c.req.query('private') === '1') return c.json(await all<Note & { started_at: string | null }>(c.env.DB,
+    `SELECT n.*, t.started_at FROM notes n LEFT JOIN time_entries t ON t.id = n.time_entry_id
+     WHERE n.client_id IS NULL ORDER BY n.created_at DESC LIMIT 20`))
   const client = c.req.query('client_id')
   if (!client) fail(400, 'חסר לקוח')
   return c.json(await all<Note>(c.env.DB, `SELECT * FROM notes WHERE client_id = ? ORDER BY created_at DESC LIMIT 200`, client))

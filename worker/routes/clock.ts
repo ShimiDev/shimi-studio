@@ -115,7 +115,8 @@ time.post('/', async c => {
   const minutes = int(b, 'minutes', { required: true, min: 1, max: 24 * 60 })!
   const client_id = str(b, 'client_id', { required: true })!
   must(await first(c.env.DB, `SELECT id FROM clients WHERE id = ?`, client_id), 'הלקוח לא נמצא')
-  const project_id = str(b, 'project_id') ?? await defaultProject(c.env.DB, client_id)
+  // project_id: null שנשלח במפורש = "בלי פרויקט". שדה חסר = הפרויקט הפעיל
+  const project_id = 'project_id' in b ? str(b, 'project_id') : await defaultProject(c.env.DB, client_id)
   await checkProject(c.env.DB, project_id, client_id)
   const id = uid()
   await run(c.env.DB,

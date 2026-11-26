@@ -483,3 +483,6 @@ button.cp-row:hover { background: var(--panel2) }
 .print-only { display: none }
 .pj-table th, .pj-table td, .pj-table .amt { text-align: start }
 .pj-table td.num, .pj-table .amt { direction: ltr; unicode-bidi: isolate; text-align: right }
+/* בחירת פרויקט לסשן בכרטיס הלקוח */
+.cp-proj-pick { max-width: 11rem; min-height: 36px; background: var(--bg); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 4px 8px; color: var(--fg); font-size: 13px }
+@media (max-width: 640px) { .cp-proj-pick { max-width: 8rem } }

@@ -15,7 +15,7 @@ import { QuickNote } from '../components/QuickNote'
 import { PaymentForm, ChargeForm, AppointmentForm, ManualTimeForm, ClientForm, ProjectForm, ReminderForm } from '../components/Forms'
 import {
   CLIENT_KINDS, workKind,
-  type ClientSummary, type Dashboard, type Project, type TimeEntry, type Charge, type Payment, type Appointment, type Client,
+  type ClientSummary, type Dashboard, type Note, type Project, type TimeEntry, type Charge, type Payment, type Appointment, type Client,
 } from '../../../shared/types'
 
 interface Detail {
@@ -35,6 +35,8 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   const clientId = routeClient ?? S.inRoom ?? clock?.client_id ?? undefined
   const detail = useData<Detail>(!privacy && clientId ? `/clients/${clientId}` : null)
   const dash = useData<Dashboard>(!privacy ? '/dashboard' : null)
+  // הערות מסשנים פרטיים: אין להן כרטיס לקוח, אז מציגים אותן כאן כשאין לקוח בחדר
+  const privNotes = useData<(Note & { started_at: string | null })[]>(!privacy && !clientId ? '/notes?private=1' : null)
   const c = detail.data?.client.id === clientId ? detail.data?.client : undefined
   const [dialog, setDialog] = useState<Dialog>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
@@ -114,6 +116,11 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
                 <button className="btn small" type="button" onClick={() => S.go({ page: 'clients' })}>בחירת לקוח</button>
                 {dash.data?.next_up?.client_id && <button className="btn small" type="button" onClick={() => S.go({ page: 'control', clientId: dash.data!.next_up!.client_id! })}>להכניס את {dash.data.next_up.client_name}</button>}
               </div>
+              {!!privNotes.data?.length && <>
+                <h4 style={{ marginTop: 14 }}>הערות מסשנים פרטיים</h4>
+                {privNotes.data.slice(0, 5).map(n => <div key={n.id} className="rem" style={{ gridTemplateColumns: "1fr auto" }}><span>{n.text}<small>{date(n.created_at)}</small></span>
+                  <button className="btn small ghost" type="button" onClick={async () => { if (!confirm('למחוק את ההערה?')) return; try { await api.del(`/notes/${n.id}`); privNotes.reload() } catch (e) { S.fail(e) } }}>מחיקה</button></div>)}
+              </>}
             </div>
           )}
           {hidden ? <div className="hidden-panel" /> : (

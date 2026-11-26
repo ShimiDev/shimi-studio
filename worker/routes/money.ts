@@ -74,11 +74,19 @@ charges.post('/', async c => {
 
   if (b.from_time === true) {
     const p = await preview(c.env.DB, client_id, project_id, int(b, 'songs', { min: 0, max: 1000 }))
-    if (!p.entry_ids.length && p.mode === 'hourly') fail(400, 'אין שעות פתוחות לחיוב')
+    // הטופס שולח את רשימת הסשנים שהוא הציג. מסמנים רק אותם, כדי שסשן שנסגר אחרי
+    // שהטופס נפתח (ולכן לא נכלל בסכום) לא יסומן כמחויב ויאבד מהחשבון
+    let ids = p.entry_ids
+    if (Array.isArray(b.entry_ids)) {
+      const shown = new Set(b.entry_ids.filter((x): x is string => typeof x === 'string'))
+      ids = ids.filter(id => shown.has(id))
+      if (ids.length !== shown.size) fail(409, 'השעות השתנו מאז שהטופס נפתח. סגרו ופתחו אותו שוב')
+    }
+    if (!ids.length && p.mode === 'hourly') fail(400, 'אין שעות פתוחות לחיוב')
     amount ??= p.amount
     description ??= p.description
     // מסמנים את השעות כמחויבות, כדי שלא יחויבו פעמיים
-    for (const eid of p.entry_ids) {
+    for (const eid of ids) {
       stmts.push(c.env.DB.prepare(`UPDATE time_entries SET charge_id = ? WHERE id = ? AND charge_id IS NULL`).bind(id, eid))
     }
   } else {

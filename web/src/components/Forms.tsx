@@ -50,6 +50,15 @@ function ProjectSelect({ clientId, value, onChange }: { clientId: string; value:
   )
 }
 
+/** ברירת מחדל לשדה הפרויקט: הפרויקט הפעיל החדש ביותר של הלקוח.
+ *  ממלא רק אם השדה עוד ריק, כך שבחירה של המשתמש (גם "בלי פרויקט") נשמרת */
+function useDefaultProject(clientId: string, onFound: (id: string) => void) {
+  const det = useData<{ projects: Project[] }>(clientId ? `/clients/${clientId}` : null)
+  const first = det.data?.projects.find(p => p.status === 'active')?.id
+  useEffect(() => { if (first) onFound(first) }, [first, clientId]) // eslint-disable-line react-hooks/exhaustive-deps
+  return det.data != null || !clientId
+}
+
 // ---------------- לקוח ----------------
 export function ClientForm({ client, onClose, onSaved }: { client?: Client; onClose(): void; onSaved?(c: Client): void }) {
   const { bump, toast } = useStore()
@@ -159,6 +168,9 @@ export function ProjectForm({ clientId, project, onClose }: { clientId: string; 
 export function PaymentForm({ clientId, projectId, onClose }: { clientId?: string; projectId?: string; onClose(): void }) {
   const { bump, toast } = useStore()
   const f = useForm({ client_id: clientId ?? '', project_id: projectId ?? '', amount: '', method: 'transfer', paid_at: toLocalInput(new Date()), notes: '' })
+  // תשלום בלי פרויקט לא נספר ב"שולם" של סיכום הפרויקט. לכן ממלאים את הפרויקט הפעיל, כמו בחיוב
+  const [picked, setPicked] = useState(!!projectId)
+  useDefaultProject(f.v.client_id, id => { if (!picked) f.setV(s => (s.project_id ? s : { ...s, project_id: id })) })
   const save = () => f.run(async () => {
     const amount = toAgorot(f.v.amount)
     if (!amount || amount <= 0) throw new ApiError('צריך סכום', 400)
@@ -168,8 +180,8 @@ export function PaymentForm({ clientId, projectId, onClose }: { clientId?: strin
   return (
     <Modal title="רישום תשלום" onClose={onClose}>
       <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
-        <ClientSelect value={f.v.client_id} onChange={v => f.setV(s => ({ ...s, client_id: v, project_id: '' }))} allowNone="בלי לקוח" />
-        <ProjectSelect clientId={f.v.client_id} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
+        <ClientSelect value={f.v.client_id} onChange={v => { setPicked(false); f.setV(s => ({ ...s, client_id: v, project_id: '' })) }} allowNone="בלי לקוח" />
+        <ProjectSelect clientId={f.v.client_id} value={f.v.project_id} onChange={v => { setPicked(true); f.setV(s => ({ ...s, project_id: v })) }} />
         <div className="fields2">
           <label className="field"><span>סכום (₪)</span><input inputMode="decimal" value={f.v.amount} onChange={f.set('amount')} /></label>
           <label className="field"><span>אמצעי תשלום</span>
@@ -190,15 +202,19 @@ export function ChargeForm({ clientId, projectId, onClose }: { clientId: string;
   const [pv, setPv] = useState<ChargePreview | null>(null)
   const prods = useData<Product[]>('/products')
   // ברירת מחדל: הפרויקט הפעיל הראשון של הלקוח
-  const det = useData<{ projects: Project[] }>(`/clients/${clientId}`)
-  const firstProject = det.data?.projects.find(p => p.status === 'active')?.id
-  useEffect(() => { if (firstProject) f.setV(s => (s.project_id ? s : { ...s, project_id: firstProject })) }, [firstProject]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [picked, setPicked] = useState(!!projectId)
+  const ready = useDefaultProject(clientId, id => { if (!picked) f.setV(s => (s.project_id ? s : { ...s, project_id: id })) })
   useEffect(() => {
-    if (f.v.mode !== 'time') return
+    // מחכים לפרויקט ברירת המחדל, ומתעלמים מתשובה ישנה: אחרת הסכום של "בלי פרויקט"
+    // יכול להגיע אחרון ולהישלח יחד עם השעות של הפרויקט
+    if (f.v.mode !== 'time' || !ready) return
+    let live = true
+    setPv(null)
     const q = new URLSearchParams({ client_id: clientId, ...(f.v.project_id ? { project_id: f.v.project_id } : {}), songs: f.v.songs || '0' })
-    api.get<ChargePreview>(`/charges/preview?${q}`).then(p => { setPv(p); f.setV(s => ({ ...s, amount: fromAgorot(p.amount), description: p.description })) }).catch(() => setPv(null))
+    api.get<ChargePreview>(`/charges/preview?${q}`).then(p => { if (!live) return; setPv(p); f.setV(s => ({ ...s, amount: fromAgorot(p.amount), description: p.description })) }).catch(() => live && setPv(null))
+    return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, f.v.project_id, f.v.mode, f.v.songs])
+  }, [clientId, f.v.project_id, f.v.mode, f.v.songs, ready])
   // מהמחירון: כמות × מחיר
   const prod = prods.data?.find(p => p.id === f.v.product_id)
   useEffect(() => {
@@ -210,9 +226,10 @@ export function ChargeForm({ clientId, projectId, onClose }: { clientId: string;
   const save = () => f.run(async () => {
     const amount = toAgorot(f.v.amount)
     if (amount == null) throw new ApiError('צריך סכום', 400)
+    if (f.v.mode === 'time' && !pv) throw new ApiError('השעות עוד נטענות. נסו שוב בעוד רגע', 400)
     await api.post('/charges', {
       client_id: clientId, project_id: f.v.project_id || null, amount, description: f.v.description,
-      ...(f.v.mode === 'time' ? { from_time: true, songs: Number(f.v.songs) || 0 } : {}),
+      ...(f.v.mode === 'time' ? { from_time: true, songs: Number(f.v.songs) || 0, entry_ids: pv!.entry_ids } : {}),
       ...(f.v.mode === 'product' && prod ? { product_id: prod.id, quantity: Number(f.v.qty) || 1, unit_price: toAgorot(f.v.price) ?? prod.price } : {}),
     })
     bump(); toast(`נרשם חיוב של ${money(amount)}`); onClose()
@@ -221,7 +238,7 @@ export function ChargeForm({ clientId, projectId, onClose }: { clientId: string;
   return (
     <Modal title="חיוב לקוח" onClose={onClose}>
       <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose} submit="חיוב">
-        <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
+        <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => { setPicked(true); f.setV(s => ({ ...s, project_id: v })) }} />
         <div className="seg" style={{ marginBottom: 12 }}>
           <button type="button" aria-pressed={f.v.mode === 'time'} onClick={() => setMode('time')}>מתוך השעות שנרשמו</button>
           <button type="button" aria-pressed={f.v.mode === 'product'} onClick={() => setMode('product')}>מהמחירון</button>
@@ -371,6 +388,9 @@ export function ExpenseForm({ onClose }: { onClose(): void }) {
 export function ManualTimeForm({ clientId, onClose }: { clientId: string; onClose(): void }) {
   const { bump, toast } = useStore()
   const f = useForm({ project_id: '', kind: 'mix', started: toLocalInput(new Date(Date.now() - 2 * 3600e3)), minutes: '120', notes: '' })
+  // מציגים מראש לאיזה פרויקט השעות ייכנסו. "בלי פרויקט" שנבחר במפורש נשמר כך
+  const [picked, setPicked] = useState(false)
+  useDefaultProject(clientId, id => { if (!picked) f.setV(s => (s.project_id ? s : { ...s, project_id: id })) })
   const save = () => f.run(async () => {
     await api.post('/time', { client_id: clientId, project_id: f.v.project_id || null, kind: f.v.kind, started_at: fromLocalInput(f.v.started), minutes: Number(f.v.minutes), notes: f.v.notes || null })
     bump(); toast('השעות נרשמו'); onClose()
@@ -378,7 +398,7 @@ export function ManualTimeForm({ clientId, onClose }: { clientId: string; onClos
   return (
     <Modal title="הוספת שעות ידנית" onClose={onClose}>
       <FormShell onSubmit={save} busy={f.busy} error={f.error} onCancel={onClose}>
-        <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => f.setV(s => ({ ...s, project_id: v }))} />
+        <ProjectSelect clientId={clientId} value={f.v.project_id} onChange={v => { setPicked(true); f.setV(s => ({ ...s, project_id: v })) }} />
         <div className="fields2">
           <label className="field"><span>סוג עבודה</span>
             <select value={f.v.kind} onChange={f.set('kind')}>{WORK_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}</select>

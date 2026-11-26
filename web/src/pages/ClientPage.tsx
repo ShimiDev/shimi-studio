@@ -54,6 +54,10 @@ export function ClientPage({ clientId }: { clientId: string }) {
     if (!confirm(msg)) return
     try { await api.del(path); S.bump(); S.toast('נמחק') } catch (e) { S.fail(e) }
   }
+  // סשן שנכנס לפרויקט הלא נכון (למשל כשיש ללקוח שני פרויקטים פעילים) עובר מכאן
+  const moveSession = async (t: TimeEntry, projectId: string | null) => {
+    try { await api.patch(`/time/${t.id}`, { project_id: projectId }); S.bump(); S.toast(projectId ? 'הסשן הועבר לפרויקט' : 'הסשן הוצא מהפרויקט') } catch (e) { S.fail(e) }
+  }
   const toggleTask = async (t: Reminder) => {
     try { await api.patch(`/reminders/${t.id}`, { done: !t.done_at }); S.bump() } catch (e) { S.fail(e) }
   }
@@ -194,6 +198,12 @@ export function ClientPage({ clientId }: { clientId: string }) {
             <span className="nowrap">{date(t.started_at)}</span>
             <span className="grow"><span className="kind-dot" style={{ background: workKind(t.kind).color }} />{workKind(t.kind).label}{t.is_client_present ? ' · REC' : ''}</span>
             <span className="num">{t.ended_at ? spoken(entrySeconds(t)) : 'רץ עכשיו'}</span>
+            {d.projects.length > 0 && (t.charge_id
+              ? <span className="mute nowrap">{d.projects.find(p => p.id === t.project_id)?.title ?? 'בלי פרויקט'}</span>
+              : <select className="cp-proj-pick" aria-label="פרויקט של הסשן" value={t.project_id ?? ''} onChange={e => moveSession(t, e.target.value || null)}>
+                  <option value="">בלי פרויקט</option>
+                  {d.projects.filter(p => p.status === 'active' || p.id === t.project_id).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>)}
             {t.charge_id ? <span className="pill ok">חויב</span> : t.ended_at
               ? <button className="btn small ghost" type="button" aria-label="מחיקת הרישום" onClick={() => del(`/time/${t.id}`, 'למחוק את הרישום?')}>מחיקה</button>
               : null}

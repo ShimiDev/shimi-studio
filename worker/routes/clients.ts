@@ -196,7 +196,7 @@ projects.patch('/:id', async c => {
   const b = await body(c.req.raw)
   const sets: string[] = []; const vals: unknown[] = []
   const put = (k: string, v: unknown) => { if (k in b) { sets.push(`${k} = ?`); vals.push(v) } }
-  put('title', str(b, 'title', { max: 160 }))
+  put('title', str(b, 'title', { required: 'title' in b, max: 160 }))
   put('billing_mode', b.billing_mode ? oneOf(b, 'billing_mode', BILLING) : null)
   put('unit_price', int(b, 'unit_price', { min: 0 }))
   put('quote_amount', int(b, 'quote_amount', { min: 0 }))

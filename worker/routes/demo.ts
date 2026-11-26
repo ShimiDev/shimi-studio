@@ -252,7 +252,20 @@ demo.post('/', async c => {
 
 demo.delete('/', async c => {
   const db = c.env.DB
-  await db.batch(TABLES.map(t => db.prepare(`DELETE FROM ${t} WHERE id LIKE '${P}%'`)))
+  // גם מה שהוזן ידנית על לקוח או פרויקט של ההדגמה (סשן, תשלום, הערה) נמחק איתם.
+  // אחרת הוא נשאר יתום: סשן בלי לקוח שנראה כמו סשן פרטי, ותשלום בלי לקוח שנספר בהכנסות
+  const demoClient = `client_id LIKE '${P}%'`
+  const demoProject = `project_id LIKE '${P}%'`
+  await db.batch([
+    db.prepare(`DELETE FROM notes WHERE ${demoClient} OR time_entry_id IN (SELECT id FROM time_entries WHERE ${demoClient} OR ${demoProject})`),
+    db.prepare(`DELETE FROM reminders WHERE ${demoClient}`),
+    db.prepare(`DELETE FROM time_entries WHERE ${demoClient} OR ${demoProject}`),
+    db.prepare(`DELETE FROM appointments WHERE ${demoClient} OR ${demoProject}`),
+    db.prepare(`DELETE FROM payments WHERE ${demoClient} OR ${demoProject}`),
+    db.prepare(`DELETE FROM charges WHERE ${demoClient} OR ${demoProject}`),
+    db.prepare(`DELETE FROM projects WHERE ${demoClient}`),
+    ...TABLES.map(t => db.prepare(`DELETE FROM ${t} WHERE id LIKE '${P}%'`)),
+  ])
   return c.json({ loaded: false })
 })
 

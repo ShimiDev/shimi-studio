@@ -130,6 +130,8 @@ function DemoPanel() {
     setBusy(true)
     try {
       setData(load ? await api.post('/demo') : await api.del('/demo'))
+      // לקוח הדגמה שנשאר "בחדר" היה חוסם את החדר ללקוחות האמיתיים
+      if (!load) try { if (sessionStorage.getItem('in-room')?.startsWith('demo-')) sessionStorage.removeItem('in-room') } catch { /* */ }
       toast(load ? 'נתוני ההדגמה נטענו' : 'נתוני ההדגמה נמחקו')
       setTimeout(() => location.reload(), 600)
     } catch (e) { fail(e) } finally { setBusy(false) }
