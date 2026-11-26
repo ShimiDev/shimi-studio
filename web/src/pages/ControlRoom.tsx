@@ -39,9 +39,14 @@ export function ControlRoom({ clientId: routeClient }: { clientId?: string }) {
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
 
   // הדמות בחלון צריכה רק צבעים. בזמן REC לוקחים אותם מהשעון ולא מהנתונים המוסתרים
-  const roomClient = clock && clock.client_id === clientId && clock.color_a
+  const fresh = clock && clock.client_id === clientId && clock.color_a
     ? { color_a: clock.color_a, color_b: clock.color_b!, is_group: clock.is_group }
     : c ? { color_a: c.color_a, color_b: c.color_b, is_group: c.is_group } : null
+  // כשעוצרים REC הנתונים נטענים מחדש לרגע. שומרים את הדמות שכבר בחדר,
+  // אחרת היא נעלמת ונכנסת שוב מהדלת
+  const lastRoom = useRef<{ id: string; rc: NonNullable<typeof fresh> } | null>(null)
+  if (fresh && clientId) lastRoom.current = { id: clientId, rc: fresh }
+  const roomClient = fresh ?? (lastRoom.current && lastRoom.current.id === clientId ? lastRoom.current.rc : null)
   const roomKey = roomClient ? `${roomClient.color_a}${roomClient.color_b}${roomClient.is_group}` : ''
   const working = !!clock && clock.kind !== 'recording' && clock.client_id === clientId
   const otherWork = !!clock && clock.kind !== 'recording' && clock.client_id !== clientId
